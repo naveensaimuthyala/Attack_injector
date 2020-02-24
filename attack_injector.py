@@ -51,8 +51,8 @@ busname = args.bus
 infrmt = args.informat
 attacktype= args.attacktype
 canid= int(args.canid)
-attk_start_time= args.attackstarttime
-attk_duration = args.attackduration
+attk_start_time= float(args.attackstarttime)
+attk_duration = float(args.attackduration)
 
 if infrmt not in parsers:
     print('Input format: {} is not a valid format.'.format(infrmt))
