@@ -115,12 +115,14 @@ class BaseAttackModel():
             self.preattack_canmsg_dict[can_msgs.arb_id]=[]
             self.preattack_canmsg_dict[can_msgs.arb_id].append(can_msgs.timestamp)
         elif can_msgs.arb_id in self.preattack_canmsg_dict:
-            #difference=  round(can_msgs.timestamp-self.preattack_canmsg_dict[can_msgs.arb_id][-1], 4)
-            #self.preattack_canmsg_dict[can_msgs.arb_id].append(difference)
-            #self.prev_imt= can_msgs.timestamp
             self.preattack_canmsg_dict[can_msgs.arb_id].append(can_msgs.timestamp)
 
 class DoSAttackModel(BaseAttackModel):
+    
+    """
+    This class manages Injection of DOS attack on to datset 
+    """
+    
     def __init__(self, attack_type,attack_start_time, attack_duration, can_msgs,instances_dict,busname, outstream):
         super(DoSAttackModel, self).__init__(attack_type,attack_start_time, attack_duration, can_msgs,instances_dict)
         
@@ -129,24 +131,27 @@ class DoSAttackModel(BaseAttackModel):
         if(self.get_attack_state(can_msgs) != True):
             
             self.watch(can_msgs)
-            print( "sending normal traffic to outfile")
+            #print( "sending normal traffic to outfile")
             print(can_message.to_canplayer(can_msgs, busname), file=outstream)
         
         if( self.get_attack_state(can_msgs) == True):
-            #GET CAN ID IN TO ARRAY
-            #GET MIN IMT VALUE
-            min_num_canid = []
+            """
+            GET CAN ID IN TO ARRAY
+            GET MIN IMT VALUE
+            """
+            min_num_canid = [] #used list for future use if attack has to be injected with more than one can id.
+            
             self.canids = sorted(list(instances_dict.keys())) #Get the canid with lowest value from the dictionary 
-            min_num_canid.append(min(self.canids))
+            min_num_canid.append(min(self.canids))  
             
             for canid in self.canids:
                                
-                print("{}:before:{}".format(canid,instances_dict[canid]))
+                #print("{}:before:{}".format(canid,instances_dict[canid]))
                 instances_dict[canid]= list(np.diff(instances_dict[canid]))
-                print("{}:after:{}".format(canid,instances_dict[canid]))
+                #print("{}:after:{}".format(canid,instances_dict[canid]))
                 
-                if( not instances_dict[canid]):  # check if it is having only one message we cannot get IMT so we need to 
-                                                # check next messasge min IMT and apply that to min can id value 
+                if( not instances_dict[canid]):  # check if it is having only one message so far  we cannot get IMT so we need to 
+                                                # check next ids can messasge min IMT and apply that to min can id value 
                     pass
                 elif (instances_dict[canid]):
                     
@@ -163,16 +168,15 @@ class DoSAttackModel(BaseAttackModel):
 def AttackFactory(can_msg,busname, attack_type,attack_start_time,attack_duration,instances_dict,outstream):
     
     """
-    Returns the appropriate attack model based on model
-    parameters.
+    Returns the appropriate attack model based on input attack type
     """
     
     if (float(attack_start_time)== can_msg.timestamp):
     
-        print("start-attack")
+        print("starting to inject -attack")
     
     if (attack_type in ['dos_vol', 'dos_prio']):
-        
+        # we are eliminating the messages parsing during attack period with following condition.
         if (can_msg.timestamp <= attack_start_time) or ( can_msg.timestamp > attack_start_time+attack_duration):
            
             return DoSAttackModel(attack_type,attack_start_time, attack_duration, can_msg,instances_dict, busname, outstream)
@@ -189,12 +193,12 @@ def parse_infile(parser,file,outfile,busname, attack_name, attack_start_time, at
     """   
     start = time.time()
     
-    instances_dict={}
+    instances_dict={}  # This is used to store statistics of previous canmsgs in watch function
+    
     with helper_functions.manage_output_stream(outfile) as outstream:
 
         with open(file, "r") as ifile:
-            #lines = [line.rstrip() for line in ifile]
-            #print(lines[10])
+
             for line in ifile:
                 cmsg = parser(line)
                 AttackFactory(cmsg,busname, attack_name,attack_start_time,attack_duration, instances_dict,outstream)

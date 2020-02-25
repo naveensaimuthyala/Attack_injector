@@ -28,10 +28,6 @@ parsers = {
         'canlong' : can_message.parse_canlong_line
 }
 
-attack_types = {
-    'DOS' : can_report_helper.GenerateReport(),
-    'REPLAY': can_report_helper.GenerateTimeseries()
-                }
 
 argp = argparse.ArgumentParser(description='This project injects different types of attacks in to log file')
 argp.add_argument('-b', '--bus', type=str, default='vcan1', help='CAN bus interface.')
@@ -41,7 +37,8 @@ argp.add_argument('infile', type=str, help='Trace/Template file.')
 argp.add_argument('-a', '--attacktype', type=str, default = None, help = 'dos|replay|fuzzy|impersonation')
 argp.add_argument('-at', '--attackstarttime', type=str, default= None, help = 'Attack Start Time')
 argp.add_argument('-ad', '--attackduration', type=str,default= None , help= 'Attack Duration')
-argp.add_argument('-id', '--canid', type=str,default=0, help= 'optional input can-id if required to analyse timeseries')
+argp.add_argument('-id', '--canid', type=str,default=0, help= 'optional input can-id if required to inject \
+                                                                        attack with particular can-id')
 
 args = argp.parse_args()
 
@@ -59,7 +56,7 @@ if infrmt not in parsers:
     sys.exit(1)
 parser = parsers[infrmt]
 
-# in attack factorey file we wrote a fucntion to parse input file and convert it to related parameters like corresponding timestamps , payload etc..
+# in attack factory file we wrote a fucntion to parse input file and convert it to related parameters like corresponding timestamps , payload etc..
 attack_factory.parse_infile(parser,infile,outfile, busname, attacktype, attk_start_time,attk_duration)
 
 # can_report_helper.report_error_handler(repotype)
