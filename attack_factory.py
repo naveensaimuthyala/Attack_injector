@@ -63,7 +63,7 @@ class CanMessageFactory():
         High speed dos_speed = 2.0
         """
         attack_msgs = []
-        
+        print(src_imt)
         for attack_msg_timestamp in np.arange(start_time, (start_time+attack_length), src_imt):
             dlc = gen_rand_dlc()
             data = gen_rand_auto_data()
@@ -96,8 +96,11 @@ class BaseAttackModel():
         
         
     def get_attack_state(self, can_msgs):
+        """
+        Checks and return whether attack time is started or not 
+        """
         now_on = False
-        # Eventually we will want to add more intricate attack patterns here.
+    
         if (can_msgs.timestamp >= self.attack_start_time) and( can_msgs.timestamp < (self.attack_start_time + self.attack_duration)):
             now_on = True
             #print("self.attack_start_time :{} timestamp is :{}".format(self.attack_start_time,can_msgs.timestamp))
@@ -109,7 +112,9 @@ class BaseAttackModel():
     
     
     def watch( self, can_msgs):
-        
+        """
+        This stores the previous canids and its time stamps in a dictonary 
+        """
         if not(can_msgs.arb_id in self.preattack_canmsg_dict):
             self.prev_imt = can_msgs.timestamp
             self.preattack_canmsg_dict[can_msgs.arb_id]=[]
@@ -123,7 +128,7 @@ class DoSAttackModel(BaseAttackModel):
     This class manages Injection of DOS attack on to datset 
     """
     
-    def __init__(self, attack_type,attack_start_time, attack_duration, can_msgs,instances_dict,busname, outstream):
+    def __init__(self, attack_type,attack_start_time, attack_duration,imt_ip, can_msgs,instances_dict,busname, outstream):
         super(DoSAttackModel, self).__init__(attack_type,attack_start_time, attack_duration, can_msgs,instances_dict)
         
         
@@ -140,32 +145,34 @@ class DoSAttackModel(BaseAttackModel):
             GET MIN IMT VALUE
             """
             min_num_canid = [] #used list for future use if attack has to be injected with more than one can id.
-            
+            self.min_imt= float(imt_ip)
             self.canids = sorted(list(instances_dict.keys())) #Get the canid with lowest value from the dictionary 
             min_num_canid.append(min(self.canids))  
-            
-            for canid in self.canids:
-                               
-                #print("{}:before:{}".format(canid,instances_dict[canid]))
-                instances_dict[canid]= list(np.diff(instances_dict[canid]))
-                #print("{}:after:{}".format(canid,instances_dict[canid]))
-                
-                if( not instances_dict[canid]):  # check if it is having only one message so far  we cannot get IMT so we need to 
-                                                # check next ids can messasge min IMT and apply that to min can id value 
-                    pass
-                elif (instances_dict[canid]):
-                    
-                    self.min_imt = min(instances_dict[canid])
 
-                    break
-            
+            if self.min_imt is None:  # if imt is not specified we will calculate default imt based on min imt seen for canid
+                
+                for canid in self.canids:
+                                
+                    #print("{}:before:{}".format(canid,instances_dict[canid]))
+                    instances_dict[canid]= list(np.diff(instances_dict[canid]))
+                    #print("{}:after:{}".format(canid,instances_dict[canid]))
+                    
+                    if( not instances_dict[canid]):  # check if it is having only one message so far  we cannot get IMT so we need to 
+                                                    # check next ids can messasge min IMT and apply that to min can id value 
+                        pass
+                    elif (instances_dict[canid]):
+                        
+                        self.min_imt = min(instances_dict[canid])
+
+                        break
+                
             
             cmf = CanMessageFactory()
             self.attack_messages = cmf.create_DoS_messages(canids=min_num_canid,\
                                                      src_imt=self.min_imt, start_time = attack_start_time,attack_length= attack_duration,\
                                                          busname= busname, outstream= outstream)
 
-def AttackFactory(can_msg,busname, attack_type,attack_start_time,attack_duration,instances_dict,outstream):
+def AttackFactory(can_msg,busname, attack_type,attack_start_time,attack_duration,imt_ip,instances_dict,outstream):
     
     """
     Returns the appropriate attack model based on input attack type
@@ -179,14 +186,14 @@ def AttackFactory(can_msg,busname, attack_type,attack_start_time,attack_duration
         # we are eliminating the messages parsing during attack period with following condition.
         if (can_msg.timestamp <= attack_start_time) or ( can_msg.timestamp > attack_start_time+attack_duration):
            
-            return DoSAttackModel(attack_type,attack_start_time, attack_duration, can_msg,instances_dict, busname, outstream)
+            return DoSAttackModel(attack_type,attack_start_time, attack_duration,imt_ip, can_msg,instances_dict, busname, outstream)
 
     else:
         return None
     
 
 
-def parse_infile(parser,file,outfile,busname, attack_name, attack_start_time, attack_duration):
+def parse_infile(parser,file,outfile,busname, attack_name, attack_start_time, attack_duration, imt_ip):
     
     """
     This function is used to parse the infile line by line and print for now 
@@ -201,7 +208,7 @@ def parse_infile(parser,file,outfile,busname, attack_name, attack_start_time, at
 
             for line in ifile:
                 cmsg = parser(line)
-                AttackFactory(cmsg,busname, attack_name,attack_start_time,attack_duration, instances_dict,outstream)
+                AttackFactory(cmsg,busname, attack_name,attack_start_time,attack_duration,imt_ip, instances_dict,outstream)
     
     #print( " instances dict ", instances_dict)
     
