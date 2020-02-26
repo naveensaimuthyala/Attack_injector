@@ -147,7 +147,10 @@ class DoSAttackModel(BaseAttackModel):
             min_num_canid = [] #used list for future use if attack has to be injected with more than one can id.
             self.min_imt= float(imt_ip)
             self.canids = sorted(list(instances_dict.keys())) #Get the canid with lowest value from the dictionary 
-            min_num_canid.append(min(self.canids))  
+            if attack_type == 'dos_prio':
+                min_num_canid.append( random.randint(0, min(self.canids))) # selecting non existing minimum can id for dos prority attack
+            elif attack_type == 'dos_vol':
+                min_num_canid.append(min(self.canids)) # selecting existing minimum can id for dos volume attack
 
             if self.min_imt is None:  # if imt is not specified we will calculate default imt based on min imt seen for canid
                 
@@ -171,7 +174,7 @@ class DoSAttackModel(BaseAttackModel):
             self.attack_messages = cmf.create_DoS_messages(canids=min_num_canid,\
                                                      src_imt=self.min_imt, start_time = attack_start_time,attack_length= attack_duration,\
                                                          busname= busname, outstream= outstream)
-
+            instances_dict.clear()
 def AttackFactory(can_msg,busname, attack_type,attack_start_time,attack_duration,imt_ip,instances_dict,outstream):
     
     """
