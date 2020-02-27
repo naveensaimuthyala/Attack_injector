@@ -9,18 +9,6 @@ import attack_factory
 
 
 
-@contextlib.contextmanager
-def open_output_stream(filename=None):
-    """
-    Borrowed from:
-    
-    https://stackoverflow.com/questions/17602878/how-to-handle-both-with-open-and-sys-stdout-nicely
-    """
-    if filename and filename != '-':
-        fh = open(filename, 'w')
-        if fh is not sys.stdout:
-            fh.close()
-
 parsers = {
         'otids' : can_message.parse_otids_line,
         'csv' : can_message.parse_csv_line,
@@ -58,7 +46,6 @@ if infrmt not in parsers:
     print('Input format: {} is not a valid format.'.format(infrmt))
     sys.exit(1)
 parser = parsers[infrmt]
-print(imt_ip)
 # in attack factory file we wrote a fucntion to parse input file and convert it to related parameters like corresponding timestamps , payload etc..
 attack_factory.parse_infile(parser,infile,outfile, busname, attacktype, attk_start_time,attk_duration, imt_ip)
 

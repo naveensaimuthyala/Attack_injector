@@ -12,7 +12,10 @@ import numpy as np
 from can_message import *
 
 # python3 attack_injector.py -i otids -o tes.log -a dos_vol -at 6.217975 -ad 0.5  ./short.txt 
-
+ATTACK_NOT_STARTED = 0
+ATTACK_START = 1
+ATTACK_ONGOING = 2
+ATTACK_COMPLETED = 3
 
 
 def gen_rand_dlc():
@@ -54,7 +57,7 @@ class CanMessageFactory():
         pass
     
    
-    def create_DoS_messages(self, canids, src_imt,start_time,attack_length,busname, outstream, dos_speed=1.0):
+    def create_DoS_messages(self, canids, src_imt,start_time,attack_length,busname,dos_speed=1.0):
         """
         These are just guesses for now.
         
@@ -70,7 +73,7 @@ class CanMessageFactory():
             imt = gen_rand_imt(maxv=src_imt/dos_speed)
             cmsg = CanMessage(dlc=dlc, data=data, timestamp= attack_msg_timestamp ,arb_id=canids[0],\
                                 dist='uniform', imt=imt)
-            print(can_message.to_canplayer(cmsg, busname), file=outstream)
+            #print(can_message.to_canplayer(cmsg, busname), file=outstream)
             attack_msgs.append(cmsg)
             print(cmsg)
         return attack_msgs
@@ -82,7 +85,7 @@ class BaseAttackModel():
     ATTACK_ALREADY_ON = 2
     ATTACK_OFF = 3
     
-    def __init__(self, attack_type,attack_start_time, attack_duration, can_msgs,instances_dict):
+    def __init__(self, attack_type,attack_start_time, attack_duration,instances_dict):
         self.min_imt = 0
         self.min_canid = 0
         self.num_msgs = 0
@@ -94,19 +97,28 @@ class BaseAttackModel():
         self.attack_start_time = attack_start_time
         self.attack_duration= attack_duration
         
-        
     def get_attack_state(self, can_msgs):
         """
         Checks and return whether attack time is started or not 
         """
-        now_on = False
-    
-        if (can_msgs.timestamp >= self.attack_start_time) and( can_msgs.timestamp < (self.attack_start_time + self.attack_duration)):
-            now_on = True
-            #print("self.attack_start_time :{} timestamp is :{}".format(self.attack_start_time,can_msgs.timestamp))
-            return now_on
-        else:
-            return now_on   
+        
+        
+        if(can_msgs.timestamp < self.attack_start_time):
+            
+            return ATTACK_NOT_STARTED
+        
+        elif(can_msgs.timestamp == self.attack_start_time):
+            
+            self.attack_state = BaseAttackModel.ATTACK_ON
+            return ATTACK_START
+        
+        elif(can_msgs.timestamp > self.attack_start_time) and( can_msgs.timestamp < (self.attack_start_time + self.attack_duration)):
+            
+            return ATTACK_ONGOING
+            
+        elif(can_msgs.timestamp > self.attack_start_time):
+            
+            return ATTACK_COMPLETED   
    
     
     
@@ -128,31 +140,28 @@ class DoSAttackModel(BaseAttackModel):
     This class manages Injection of DOS attack on to datset 
     """
     
-    def __init__(self, attack_type,attack_start_time, attack_duration,imt_ip, can_msgs,instances_dict,busname, outstream):
-        super(DoSAttackModel, self).__init__(attack_type,attack_start_time, attack_duration, can_msgs,instances_dict)
+    def __init__(self, attack_type,attack_start_time, attack_duration,imt_ip,instances_dict,busname):
+        super(DoSAttackModel, self).__init__(attack_type,attack_start_time, attack_duration,instances_dict)
+        self.attack_type =attack_type
+        self.attack_start_time=attack_start_time
+        self.attack_duration=attack_duration
+        self.imt_ip=imt_ip
+        self.busname=busname
+    def get_attack_msgs(self, instances_dict): 
         
-        
-        
-        if(self.get_attack_state(can_msgs) != True):
-            
-            self.watch(can_msgs)
-            #print( "sending normal traffic to outfile")
-            print(can_message.to_canplayer(can_msgs, busname), file=outstream)
-        
-        if( self.get_attack_state(can_msgs) == True):
+        if( self.attack_state == BaseAttackModel.ATTACK_ON):
             """
             GET CAN ID IN TO ARRAY
             GET MIN IMT VALUE
             """
             min_num_canid = [] #used list for future use if attack has to be injected with more than one can id.
-            self.min_imt= float(imt_ip)
             self.canids = sorted(list(instances_dict.keys())) #Get the canid with lowest value from the dictionary 
-            if attack_type == 'dos_prio':
+            if self.attack_type == 'dos_prio':
                 min_num_canid.append( random.randint(0, min(self.canids))) # selecting non existing minimum can id for dos prority attack
-            elif attack_type == 'dos_vol':
+            elif self.attack_type == 'dos_vol':
                 min_num_canid.append(min(self.canids)) # selecting existing minimum can id for dos volume attack
 
-            if self.min_imt is None:  # if imt is not specified we will calculate default imt based on min imt seen for canid
+            if self.imt_ip is None:  # if imt is not specified we will calculate default imt based on min imt seen for canid
                 
                 for canid in self.canids:
                                 
@@ -168,28 +177,35 @@ class DoSAttackModel(BaseAttackModel):
                         self.min_imt = min(instances_dict[canid])
 
                         break
+            elif self.imt_ip is not None:
+                
+                self.min_imt= float(self.imt_ip)
+
                 
             
             cmf = CanMessageFactory()
             self.attack_messages = cmf.create_DoS_messages(canids=min_num_canid,\
-                                                     src_imt=self.min_imt, start_time = attack_start_time,attack_length= attack_duration,\
-                                                         busname= busname, outstream= outstream)
+                                                     src_imt=self.min_imt, start_time = self.attack_start_time,attack_length= self.attack_duration,\
+                                                         busname= self.busname)
+            
             instances_dict.clear()
-def AttackFactory(can_msg,busname, attack_type,attack_start_time,attack_duration,imt_ip,instances_dict,outstream):
+            return self.attack_messages
+        
+        
+        
+        
+        
+def AttackFactory(busname, attack_type,attack_start_time,attack_duration,imt_ip,instances_dict):
     
     """
     Returns the appropriate attack model based on input attack type
     """
-    
-    if (float(attack_start_time)== can_msg.timestamp):
-    
-        print("starting to inject -attack")
+   
     
     if (attack_type in ['dos_vol', 'dos_prio']):
-        # we are eliminating the messages parsing during attack period with following condition.
-        if (can_msg.timestamp <= attack_start_time) or ( can_msg.timestamp > attack_start_time+attack_duration):
-           
-            return DoSAttackModel(attack_type,attack_start_time, attack_duration,imt_ip, can_msg,instances_dict, busname, outstream)
+        
+        return DoSAttackModel(attack_type = attack_type,attack_start_time = attack_start_time,\
+                attack_duration =attack_duration,imt_ip= imt_ip,instances_dict= instances_dict, busname= busname)
 
     else:
         return None
@@ -204,6 +220,7 @@ def parse_infile(parser,file,outfile,busname, attack_name, attack_start_time, at
     start = time.time()
     
     instances_dict={}  # This is used to store statistics of previous canmsgs in watch function
+    attack = AttackFactory(busname, attack_name,attack_start_time,attack_duration,imt_ip, instances_dict)
     
     with helper_functions.manage_output_stream(outfile) as outstream:
 
@@ -211,9 +228,24 @@ def parse_infile(parser,file,outfile,busname, attack_name, attack_start_time, at
 
             for line in ifile:
                 cmsg = parser(line)
-                AttackFactory(cmsg,busname, attack_name,attack_start_time,attack_duration,imt_ip, instances_dict,outstream)
-    
-    #print( " instances dict ", instances_dict)
+                
+                
+                if (attack.get_attack_state(cmsg)== ATTACK_NOT_STARTED):
+                    print( " sending normal msg")
+                    attack.watch(cmsg)
+                    print(can_message.to_canplayer(cmsg, busname), file=outstream)
+                
+                elif (attack.get_attack_state(cmsg) == ATTACK_START):
+                    amsg = attack.get_attack_msgs(instances_dict)
+                    for message in amsg:
+                        print(can_message.to_canplayer(message, busname), file=outstream)
+                    
+                elif ( attack.get_attack_state(cmsg) == ATTACK_ONGOING ):
+                    print(can_message.to_canplayer(cmsg, busname), file=outstream)
+                    
+                elif(attack.get_attack_state(cmsg) == ATTACK_COMPLETED ):
+                    print(can_message.to_canplayer(cmsg, busname), file=outstream)
+
     
     end = time.time()
     print( " The time took to inject attack and process file is {0:.4f} seconds".format(end-start))
