@@ -75,7 +75,6 @@ class CanMessageFactory():
                                 dist='uniform', imt=imt)
             #print(can_message.to_canplayer(cmsg, busname), file=outstream)
             attack_msgs.append(cmsg)
-            print(cmsg)
         return attack_msgs
     
 
@@ -147,7 +146,7 @@ class DoSAttackModel(BaseAttackModel):
         self.attack_duration=attack_duration
         self.imt_ip=imt_ip
         self.busname=busname
-    def get_attack_msgs(self, instances_dict): 
+    def get_attack_msgs(self): 
         
         if( self.attack_state == BaseAttackModel.ATTACK_ON):
             """
@@ -155,7 +154,7 @@ class DoSAttackModel(BaseAttackModel):
             GET MIN IMT VALUE
             """
             min_num_canid = [] #used list for future use if attack has to be injected with more than one can id.
-            self.canids = sorted(list(instances_dict.keys())) #Get the canid with lowest value from the dictionary 
+            self.canids = sorted(list(self.preattack_canmsg_dict.keys())) #Get the canid with lowest value from the dictionary 
             if self.attack_type == 'dos_prio':
                 min_num_canid.append( random.randint(0, min(self.canids))) # selecting non existing minimum can id for dos prority attack
             elif self.attack_type == 'dos_vol':
@@ -166,15 +165,15 @@ class DoSAttackModel(BaseAttackModel):
                 for canid in self.canids:
                                 
                     #print("{}:before:{}".format(canid,instances_dict[canid]))
-                    instances_dict[canid]= list(np.diff(instances_dict[canid]))
+                    self.preattack_canmsg_dict[canid]= list(np.diff(self.preattack_canmsg_dict[canid]))
                     #print("{}:after:{}".format(canid,instances_dict[canid]))
                     
-                    if( not instances_dict[canid]):  # check if it is having only one message so far  we cannot get IMT so we need to 
+                    if( not self.preattack_canmsg_dict[canid]):  # check if it is having only one message so far  we cannot get IMT so we need to 
                                                     # check next ids can messasge min IMT and apply that to min can id value 
                         pass
-                    elif (instances_dict[canid]):
+                    elif (self.preattack_canmsg_dict[canid]):
                         
-                        self.min_imt = min(instances_dict[canid])
+                        self.min_imt = min(self.preattack_canmsg_dict[canid])
 
                         break
             elif self.imt_ip is not None:
@@ -188,7 +187,7 @@ class DoSAttackModel(BaseAttackModel):
                                                      src_imt=self.min_imt, start_time = self.attack_start_time,attack_length= self.attack_duration,\
                                                          busname= self.busname)
             
-            instances_dict.clear()
+            self.preattack_canmsg_dict.clear()
             return self.attack_messages
         
         
@@ -212,7 +211,7 @@ def AttackFactory(busname, attack_type,attack_start_time,attack_duration,imt_ip,
     
 
 
-def parse_infile(parser,file,outfile,busname, attack_name, attack_start_time, attack_duration, imt_ip):
+def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, attack_duration, imt_ip):
     
     """
     This function is used to parse the infile line by line and print for now 
@@ -236,8 +235,9 @@ def parse_infile(parser,file,outfile,busname, attack_name, attack_start_time, at
                     print(can_message.to_canplayer(cmsg, busname), file=outstream)
                 
                 elif (attack.get_attack_state(cmsg) == ATTACK_START):
-                    amsg = attack.get_attack_msgs(instances_dict)
+                    amsg = attack.get_attack_msgs()
                     for message in amsg:
+                        print(message)
                         print(can_message.to_canplayer(message, busname), file=outstream)
                     
                 elif ( attack.get_attack_state(cmsg) == ATTACK_ONGOING ):

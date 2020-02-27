@@ -1,7 +1,6 @@
 import contextlib
 import sys, os
 import time
-import can_report_helper
 import argparse
 import can_message
 import pandas as pd
@@ -46,11 +45,11 @@ if infrmt not in parsers:
     print('Input format: {} is not a valid format.'.format(infrmt))
     sys.exit(1)
 parser = parsers[infrmt]
+
+
 # in attack factory file we wrote a fucntion to parse input file and convert it to related parameters like corresponding timestamps , payload etc..
-attack_factory.parse_infile(parser,infile,outfile, busname, attacktype, attk_start_time,attk_duration, imt_ip)
 
-# can_report_helper.report_error_handler(repotype)
-# reporter = report_types[repotype]
+attack_factory.inject_attack(parser,infile,outfile, busname, attacktype, attk_start_time,attk_duration, imt_ip)
 
-# start = time.time()
+
 
