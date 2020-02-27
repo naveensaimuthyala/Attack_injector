@@ -84,14 +84,14 @@ class BaseAttackModel():
     ATTACK_ALREADY_ON = 2
     ATTACK_OFF = 3
     
-    def __init__(self, attack_type,attack_start_time, attack_duration,instances_dict):
+    def __init__(self, attack_type,attack_start_time, attack_duration):
         self.min_imt = 0
         self.min_canid = 0
         self.num_msgs = 0
         self.attack_interval = [4.0, 8.0]
         self.attack_state = BaseAttackModel.ATTACK_OFF
         self.attack_messages = None  # Attack messages (in a queue)
-        self.preattack_canmsg_dict =instances_dict
+        self.preattack_canmsg_dict ={}
         self.prev_imt = 0
         self.attack_start_time = attack_start_time
         self.attack_duration= attack_duration
@@ -139,8 +139,8 @@ class DoSAttackModel(BaseAttackModel):
     This class manages Injection of DOS attack on to datset 
     """
     
-    def __init__(self, attack_type,attack_start_time, attack_duration,imt_ip,instances_dict,busname):
-        super(DoSAttackModel, self).__init__(attack_type,attack_start_time, attack_duration,instances_dict)
+    def __init__(self, attack_type,attack_start_time, attack_duration,imt_ip,busname):
+        super(DoSAttackModel, self).__init__(attack_type,attack_start_time, attack_duration)
         self.attack_type =attack_type
         self.attack_start_time=attack_start_time
         self.attack_duration=attack_duration
@@ -194,7 +194,7 @@ class DoSAttackModel(BaseAttackModel):
         
         
         
-def AttackFactory(busname, attack_type,attack_start_time,attack_duration,imt_ip,instances_dict):
+def AttackFactory(busname, attack_type,attack_start_time,attack_duration,imt_ip):
     
     """
     Returns the appropriate attack model based on input attack type
@@ -204,7 +204,7 @@ def AttackFactory(busname, attack_type,attack_start_time,attack_duration,imt_ip,
     if (attack_type in ['dos_vol', 'dos_prio']):
         
         return DoSAttackModel(attack_type = attack_type,attack_start_time = attack_start_time,\
-                attack_duration =attack_duration,imt_ip= imt_ip,instances_dict= instances_dict, busname= busname)
+                attack_duration =attack_duration,imt_ip= imt_ip, busname= busname)
 
     else:
         return None
@@ -218,8 +218,7 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
     """   
     start = time.time()
     
-    instances_dict={}  # This is used to store statistics of previous canmsgs in watch function
-    attack = AttackFactory(busname, attack_name,attack_start_time,attack_duration,imt_ip, instances_dict)
+    attack = AttackFactory(busname, attack_name,attack_start_time,attack_duration,imt_ip)
     
     with helper_functions.manage_output_stream(outfile) as outstream:
 
