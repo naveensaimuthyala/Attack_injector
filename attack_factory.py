@@ -66,7 +66,7 @@ class CanMessageFactory():
         High speed dos_speed = 2.0
         """
         attack_msgs = []
-        print(src_imt)
+        print("The imt value being introduced in attack is: {}".format(src_imt))
         for attack_msg_timestamp in np.arange(start_time, (start_time+attack_length), src_imt):
             dlc = gen_rand_dlc()
             data = gen_rand_auto_data()
@@ -106,14 +106,15 @@ class BaseAttackModel():
             
             return ATTACK_NOT_STARTED
         
-        elif(can_msgs.timestamp == self.attack_start_time):
-            
+        elif (can_msgs.timestamp >= self.attack_start_time)  and ( can_msgs.timestamp <= (self.attack_start_time + self.attack_duration)):
+           
             self.attack_state = BaseAttackModel.ATTACK_ON
-            return ATTACK_START
-        
-        elif(can_msgs.timestamp > self.attack_start_time) and( can_msgs.timestamp < (self.attack_start_time + self.attack_duration)):
+                       
+            if(can_msgs.timestamp > self.attack_start_time):
+               
+               self.attack_state = BaseAttackModel.ATTACK_ALREADY_ON              
             
-            return ATTACK_ONGOING
+            return ATTACK_START
             
         elif(can_msgs.timestamp > self.attack_start_time):
             
@@ -148,6 +149,7 @@ class DoSAttackModel(BaseAttackModel):
         self.busname=busname
     def get_attack_msgs(self): 
         
+        #print( "attack state is ", self.attack_state)
         if( self.attack_state == BaseAttackModel.ATTACK_ON):
             """
             GET CAN ID IN TO ARRAY
@@ -189,7 +191,9 @@ class DoSAttackModel(BaseAttackModel):
             
             self.preattack_canmsg_dict.clear()
             return self.attack_messages
-        else:
+        
+        
+        else: 
             return self.attack_messages
         
         
@@ -220,6 +224,7 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
     start = time.time()
     
     attack = AttackFactory(busname, attack_name,attack_start_time,attack_duration,imt_ip)
+    
     with helper_functions.manage_output_stream(outfile) as outstream:
 
         with open(file, "r") as ifile:
@@ -236,20 +241,18 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
                 
                 elif (attack.get_attack_state(cmsg) == ATTACK_START):
                     amsg = attack.get_attack_msgs()
-                    print(can_message.to_canplayer(cmsg, busname), file=outstream)
-
-                elif ( attack.get_attack_state(cmsg) == ATTACK_ONGOING ):
                     
                     while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
+                        
                         print(amsg[current_index])
                         print(can_message.to_canplayer(amsg[current_index], busname), file=outstream)
                         current_index+= 1
-                        
-                    print(can_message.to_canplayer(cmsg, busname), file=outstream)
                     
+                    print(can_message.to_canplayer(cmsg, busname), file=outstream)
+
                 elif(attack.get_attack_state(cmsg) == ATTACK_COMPLETED ):
                     print(can_message.to_canplayer(cmsg, busname), file=outstream)
 
     
     end = time.time()
-    print( " The time took to inject attack and process file is {0:.4f} seconds".format(end-start))
+    print( " The time took to inject {0} attack and process file is {1:.4f} seconds".format(current_index,end-start))
