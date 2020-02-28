@@ -189,7 +189,8 @@ class DoSAttackModel(BaseAttackModel):
             
             self.preattack_canmsg_dict.clear()
             return self.attack_messages
-        
+        else:
+            return self.attack_messages
         
         
         
@@ -219,11 +220,11 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
     start = time.time()
     
     attack = AttackFactory(busname, attack_name,attack_start_time,attack_duration,imt_ip)
-    
     with helper_functions.manage_output_stream(outfile) as outstream:
 
         with open(file, "r") as ifile:
-
+            current_index=0
+   
             for line in ifile:
                 cmsg = parser(line)
                 
@@ -235,11 +236,15 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
                 
                 elif (attack.get_attack_state(cmsg) == ATTACK_START):
                     amsg = attack.get_attack_msgs()
-                    for message in amsg:
-                        print(message)
-                        print(can_message.to_canplayer(message, busname), file=outstream)
-                    
+                    print(can_message.to_canplayer(cmsg, busname), file=outstream)
+
                 elif ( attack.get_attack_state(cmsg) == ATTACK_ONGOING ):
+                    
+                    while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
+                        print(amsg[current_index])
+                        print(can_message.to_canplayer(amsg[current_index], busname), file=outstream)
+                        current_index+= 1
+                        
                     print(can_message.to_canplayer(cmsg, busname), file=outstream)
                     
                 elif(attack.get_attack_state(cmsg) == ATTACK_COMPLETED ):
