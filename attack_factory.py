@@ -57,7 +57,7 @@ class CanMessageFactory():
         pass
     
    
-    def create_DoS_messages(self, canids, src_imt,start_time,attack_length,busname,dos_speed=1.0):
+    def create_DoS_messages(self, canids,payload, src_imt,start_time,attack_length,busname,dos_speed=1.0):
         """
         These are just guesses for now.
         
@@ -69,13 +69,29 @@ class CanMessageFactory():
         print("The imt value being introduced in attack is: {}".format(src_imt))
         for attack_msg_timestamp in np.arange(start_time, (start_time+attack_length), src_imt):
             dlc = gen_rand_dlc()
-            data = gen_rand_auto_data()
+            data = payload  #sending minimum ids payload to every attack message
             imt = gen_rand_imt(maxv=src_imt/dos_speed)
             cmsg = CanMessage(dlc=dlc, data=data, timestamp= attack_msg_timestamp ,arb_id=canids[0],\
                                 dist='uniform', imt=imt)
-            #print(can_message.to_canplayer(cmsg, busname), file=outstream)
             attack_msgs.append(cmsg)
         return attack_msgs
+    
+        def create_Fuzzy_messages(self, canids, src_imt,start_time,attack_length,busname):
+            """
+            This method creates Fuzzy attack messages 
+            and return list of all Fuzzy attack messages
+
+            """
+            attack_msgs = []
+            print("The imt value being introduced in attack is: {}".format(src_imt))
+            for attack_msg_timestamp in np.arange(start_time, (start_time+attack_length), src_imt):
+                dlc = gen_rand_dlc()
+                data = gen_rand_auto_data()  #sending Random payload for every message 
+                imt = gen_rand_imt(maxv=src_imt)
+                cmsg = CanMessage(dlc=dlc, data=data, timestamp= attack_msg_timestamp ,arb_id=canids[0],\
+                                    dist='uniform', imt=imt)
+                attack_msgs.append(cmsg)
+            return attack_msgs
     
 
 
@@ -95,6 +111,8 @@ class BaseAttackModel():
         self.prev_imt = 0
         self.attack_start_time = attack_start_time
         self.attack_duration= attack_duration
+        self.minid_payload =[] 
+        self.minid_dos =-1
         
     def get_attack_state(self, can_msgs):
         """
@@ -127,6 +145,18 @@ class BaseAttackModel():
         """
         This stores the previous canids and its time stamps in a dictonary 
         """
+        #store min can id and its payload alone
+        if (self.minid_dos != -1 and can_msgs.arb_id < self.minid_dos):
+        
+            self.minid_dos = can_msgs.arb_id
+            self.minid_payload = can_msgs.data
+            
+        elif( self.minid_dos == -1):
+            self.minid_dos = can_msgs.arb_id
+            self.minid_payload=can_msgs.data
+        
+        print( "min can id is :",self.minid_dos)
+        #store can ids and its time stamps in dictionary
         if not(can_msgs.arb_id in self.preattack_canmsg_dict):
             self.prev_imt = can_msgs.timestamp
             self.preattack_canmsg_dict[can_msgs.arb_id]=[]
@@ -185,7 +215,7 @@ class DoSAttackModel(BaseAttackModel):
                 
             
             cmf = CanMessageFactory()
-            self.attack_messages = cmf.create_DoS_messages(canids=min_num_canid,\
+            self.attack_messages = cmf.create_DoS_messages(canids=min_num_canid, payload= self.minid_payload , \
                                                      src_imt=self.min_imt, start_time = self.attack_start_time,attack_length= self.attack_duration,\
                                                          busname= self.busname)
             
@@ -197,8 +227,75 @@ class DoSAttackModel(BaseAttackModel):
             return self.attack_messages
         
         
+class FuzzyAttackModel(BaseAttackModel):
+    
+    """
+    This class manages Injection of DOS attack on to datset 
+    """
+    
+    def __init__(self, attack_type,attack_start_time, attack_duration,imt_ip,busname):
+        super(FuzzyAttackModel, self).__init__(attack_type,attack_start_time, attack_duration)
+        self.attack_type =attack_type
+        self.attack_start_time=attack_start_time
+        self.attack_duration=attack_duration
+        self.imt_ip=imt_ip
+        self.busname=busname
+        
+    def get_attack_msgs(self): 
+        
+        #print( "attack state is ", self.attack_state)
+        if( self.attack_state == BaseAttackModel.ATTACK_ON):
+            """
+            GET CAN ID IN TO ARRAY
+            GET MIN IMT VALUE
+            """
+            min_num_canid = [] #used list for future use if attack has to be injected with more than one can id.
+            self.canids = sorted(list(self.preattack_canmsg_dict.keys())) #Get the canid with lowest value from the dictionary 
+            if self.attack_type == 'dos_prio':
+                min_num_canid.append( random.randint(0, min(self.canids))) # selecting non existing minimum can id for dos prority attack
+            elif self.attack_type == 'dos_vol':
+                min_num_canid.append(min(self.canids)) # selecting existing minimum can id for dos volume attack
+
+            if self.imt_ip is None:  # if imt is not specified we will calculate default imt based on min imt seen for canid
+                
+                for canid in self.canids:
+                                
+                    #print("{}:before:{}".format(canid,instances_dict[canid]))
+                    self.preattack_canmsg_dict[canid]= list(np.diff(self.preattack_canmsg_dict[canid]))
+                    #print("{}:after:{}".format(canid,instances_dict[canid]))
+                    
+                    if( not self.preattack_canmsg_dict[canid]):  # check if it is having only one message so far  we cannot get IMT so we need to 
+                                                    # check next ids can messasge min IMT and apply that to min can id value 
+                        pass
+                    elif (self.preattack_canmsg_dict[canid]):
+                        
+                        self.min_imt = min(self.preattack_canmsg_dict[canid])
+
+                        break
+            elif self.imt_ip is not None:
+                
+                self.min_imt= float(self.imt_ip)
+
+                
+            
+            cmf = CanMessageFactory()
+            self.attack_messages = cmf.create_DoS_messages(canids=min_num_canid, payload= self.minid_payload , \
+                                                     src_imt=self.min_imt, start_time = self.attack_start_time,attack_length= self.attack_duration,\
+                                                         busname= self.busname)
+            
+            self.preattack_canmsg_dict.clear()
+            return self.attack_messages
         
         
+        else: 
+            return self.attack_messages
+        
+
+
+
+
+
+
 def AttackFactory(busname, attack_type,attack_start_time,attack_duration,imt_ip):
     
     """
@@ -239,7 +336,7 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
                     attack.watch(cmsg)
                     print(can_message.to_canplayer(cmsg, busname), file=outstream)
                 
-                elif (attack.get_attack_state(cmsg) == ATTACK_START):
+                elif (attack.get_attack_state(cmsg) == ATTACK_START): ## Change the ATTACK_START macro to ATTACK_PHASE
                     amsg = attack.get_attack_msgs()
                     
                     while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
@@ -255,4 +352,4 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
 
     
     end = time.time()
-    print( " The time took to inject {0} attack and process file is {1:.4f} seconds".format(current_index,end-start))
+    print( " The time took to inject {0} attack messages and process file is {1:.4f} seconds".format(current_index,end-start))
