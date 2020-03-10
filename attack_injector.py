@@ -28,7 +28,9 @@ argp.add_argument('-ad', '--attackduration', type=str,default= None , help= 'Att
 argp.add_argument('-imt','--imt', type=str, default= None, help='IMT for attack messages')
 argp.add_argument('-id', '--canid', type=str,default= -1, help= ' input can-id if required to inject \
                                                                         replay attack with particular can-id')
-argp.add_argument('-K', '--replay_seq_length', type=str, default = 1, help= " replay sequence window size" )
+argp.add_argument('-w', '--replay_seq_length', type=str, default = 1, help= " replay sequence window size" )
+argp.add_argument('-rn', '--number_of_times_to_replay', type=str, default = 1, help= " replay sequence window size" )
+
 
 
 
@@ -44,6 +46,7 @@ attk_start_time= float(args.attackstarttime)
 attk_duration = float(args.attackduration)
 imt_ip=args.imt
 replay_seq_window = float(args.replay_seq_length)
+no_of_times_times_to_replay = int( args.number_of_times_to_replay)
 
 if infrmt not in parsers:
     print('Input format: {} is not a valid format.'.format(infrmt))
@@ -53,7 +56,8 @@ parser = parsers[infrmt]
 
 # in attack factory file we wrote a fucntion to parse input file and convert it to related parameters like corresponding timestamps , payload etc..
 
-attack_factory.inject_attack(parser,infile,outfile, busname, attacktype, attk_start_time,attk_duration, imt_ip, replay_seq_window,rcanid)
+attack_factory.inject_attack(parser,infile,outfile, busname, attacktype, attk_start_time,attk_duration, imt_ip, replay_seq_window,rcanid \
+                            , no_of_times_times_to_replay)
 
 
 

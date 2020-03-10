@@ -96,7 +96,7 @@ class CanMessageFactory():
             attack_msgs.append(cmsg)
         return attack_msgs
 
-    def create_Replay_messages(self, cmsgs, start_time,attack_duration):
+    def create_Replay_messages(self, cmsgs, start_time,attack_duration, imt_ip,no_of_times_times_to_replay):
     
         """
         This method creates Replay attack messages 
@@ -104,14 +104,25 @@ class CanMessageFactory():
 
         """
         attack_msgs=[]
-        x= np.random.uniform(low=start_time, high = (start_time+attack_duration), size= len(cmsgs) )
-        x.sort()  # since random function returns randomly with in range we are sorting the list
-        
-        for message , index in  zip(cmsgs, range(0,len(cmsgs))):
-            print( " message being changed is :", message)
-            message.timestamp = x[index]    
-            attack_msgs.append(message)
+        cmsgs= list(cmsgs)*no_of_times_times_to_replay
+  
+        for index, message in zip(range(0,len(cmsgs)) , cmsgs):
+           # print( " message being changed is :", message)
+            message_c= copy.deepcopy(message)
+            message_c.timestamp= start_time + (index*imt_ip)
+            attack_msgs.append(message_c)
+            #print( " message  changed is :", message)
+        print( " attack mgsgs",attack_msgs)
         return attack_msgs
+        
+        # x= np.random.uniform(low=start_time, high = (start_time+attack_duration), size= no_of_times_times_to_replay*len(cmsgs) )
+        # x.sort()  # since random function returns randomly with in range we are sorting the list
+        
+        # for message , index in  zip(cmsgs, range(0,len(cmsgs))):
+        #     print( " message being changed is :", message)
+        #     message.timestamp = x[index]    
+        #     attack_msgs.append(message)
+        # return attack_msgs
     
 
 
@@ -174,7 +185,10 @@ class BaseAttackModel():
         """
         This stores the previous canids and its time stamps in a dictonary 
         """
+        
+            
 
+            
         #store min can id and its payload alone
         if (self.minid_dos != -1 and can_msgs.arb_id < self.minid_dos):
         
@@ -386,7 +400,7 @@ class ReplayAttackModel(BaseAttackModel):
     This class manages Injection of Replay single and sequence  attack  messages on to datset 
     """
     
-    def __init__(self, attack_type,attack_start_time, attack_duration,imt_ip,busname,replay_seq_window, rcanid):
+    def __init__(self, attack_type,attack_start_time, attack_duration,imt_ip,busname,replay_seq_window, rcanid, no_of_times_times_to_replay):
         super(ReplayAttackModel, self).__init__(attack_type=attack_type,attack_start_time=attack_start_time, attack_duration=attack_duration, \
                                                    replay_seq_window= replay_seq_window,rcanid= rcanid)
         self.attack_type =attack_type
@@ -394,6 +408,7 @@ class ReplayAttackModel(BaseAttackModel):
         self.attack_duration=attack_duration
         self.imt_ip=imt_ip # if in case we have specific imt to replay attack msgs we can use this
         self.busname=busname
+        self.no_of_times_times_to_replay = no_of_times_times_to_replay
         
     def get_attack_msgs(self): 
         
@@ -404,14 +419,22 @@ class ReplayAttackModel(BaseAttackModel):
         #print( "attack state is ", self.attack_state)
         if( self.attack_state == BaseAttackModel.ATTACK_ON):
             
+            if (self.imt_ip==None and len(self.q)> 1):
+                self.imt_ip = self.q[1].timestamp -self.q[0].timestamp
+            elif ( len(self.q )==1 and self.imt_ip == None):
+                print(" Please provoide IMT if it is single message replay ")
+                sys.exit()
             
             cmf = CanMessageFactory()
             
+            print( "replaying imt is {}".format(self.imt_ip))
+
             print( " in replay",self.replay_stream[0])
-            self.attack_messages=cmf.create_Replay_messages(cmsgs=self.replay_stream[0], start_time= self.attack_start_time,\
-                                                                attack_duration= self.attack_duration )
+            self.attack_messages=cmf.create_Replay_messages(cmsgs=self.replay_stream[0], start_time= self.attack_start_time, imt_ip=self.imt_ip,\
+                                                                attack_duration= self.attack_duration, no_of_times_times_to_replay=self.no_of_times_times_to_replay)
  
 
+        
         return self.attack_messages
         
 
@@ -420,7 +443,7 @@ class ReplayAttackModel(BaseAttackModel):
 
 
 
-def AttackFactory(busname, attack_type,attack_start_time,attack_duration,imt_ip,replay_seq_window, rcanid):
+def AttackFactory(busname, attack_type,attack_start_time,attack_duration,imt_ip,replay_seq_window, rcanid,no_of_times_times_to_replay):
     
     """
     Returns the appropriate attack model based on input attack type
@@ -437,7 +460,8 @@ def AttackFactory(busname, attack_type,attack_start_time,attack_duration,imt_ip,
                                 attack_duration =attack_duration,imt_ip= imt_ip, busname= busname)
     elif ( attack_type == 'replay'):
         return ReplayAttackModel( attack_type =attack_type, attack_start_time = attack_start_time , \
-                                attack_duration =attack_duration,imt_ip= imt_ip, busname= busname, replay_seq_window=replay_seq_window, rcanid=rcanid)    
+                                attack_duration =attack_duration,imt_ip=imt_ip, busname= busname, replay_seq_window=replay_seq_window, rcanid=rcanid,\
+                                     no_of_times_times_to_replay=no_of_times_times_to_replay)    
     else:
         
         return None
@@ -456,20 +480,21 @@ def write_attackmsgs_to_outfile( amsg, cmsg , current_index ,busname, outstream)
 
     
 
-def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, attack_duration, imt_ip,replay_seq_window, rcanid):
+def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, attack_duration, imt_ip,replay_seq_window, rcanid, \
+                     no_of_times_times_to_replay):
     
     """
     This function is used to parse the infile line by line and print for now 
     """   
     start = time.time()
     current_index=0
-    attack = AttackFactory(busname, attack_name,attack_start_time,attack_duration,imt_ip,replay_seq_window,rcanid)
+    attack = AttackFactory(busname, attack_name,attack_start_time,attack_duration,imt_ip,replay_seq_window,rcanid, no_of_times_times_to_replay)
     
     with helper_functions.manage_output_stream(outfile) as outstream:
 
         with open(file, "r") as ifile:
+                       
             
-   
             for line in ifile:
                 cmsg = parser(line)
                 
@@ -491,8 +516,12 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
                         print(can_message.to_canplayer(cmsg, busname), file=outstream)
                    
                     else:
+                        """
+                        corner case is to check whether there are any remaining lines at end of normal data line inclue them to op file
+                        """
                         
                         amsg = attack.get_attack_msgs()
+                        
                         while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
                             print("here",amsg[current_index] , current_index)
                             print(can_message.to_canplayer(amsg[current_index], busname), file=outstream)
@@ -500,8 +529,18 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
                         print(can_message.to_canplayer(cmsg, busname), file=outstream)
 
                 elif(attack.get_attack_state(cmsg) == ATTACK_COMPLETED ):
+                    amsg = attack.get_attack_msgs()
+                    while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
+                        print("here attack end ",amsg[current_index] , current_index)
+                        print(can_message.to_canplayer(amsg[current_index], busname), file=outstream)
+                        current_index+= 1                    
                     print(can_message.to_canplayer(cmsg, busname), file=outstream) # combine this and first condition at end of this version  release 
-
+                    
+        leftover_msgs= attack.get_attack_msgs()
+        while(current_index < len(leftover_msgs)):
+            print(can_message.to_canplayer(leftover_msgs[current_index], busname), file=outstream)
+            current_index+= 1          
+                    
     
     end = time.time()
     print( " The time took to inject {0} attack messages and process file is {1:.4f} seconds".format(current_index,end-start))
