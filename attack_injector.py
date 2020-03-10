@@ -44,7 +44,7 @@ attacktype= args.attacktype
 rcanid= int(args.canid)
 attk_start_time= float(args.attackstarttime)
 attk_duration = float(args.attackduration)
-imt_ip=args.imt
+imt_ip=float(args.imt)
 replay_seq_window = float(args.replay_seq_length)
 no_of_times_times_to_replay = int( args.number_of_times_to_replay)
 

@@ -187,29 +187,29 @@ class BaseAttackModel():
         """
         
             
-
+        if( self.attack_type not in ['replay']):
+               
+            #store min can id and its payload alone
+            if (self.minid_dos != -1 and can_msgs.arb_id < self.minid_dos):
             
-        #store min can id and its payload alone
-        if (self.minid_dos != -1 and can_msgs.arb_id < self.minid_dos):
-        
-            self.minid_dos = can_msgs.arb_id
-            self.minid_payload = can_msgs.data
-        
+                self.minid_dos = can_msgs.arb_id
+                self.minid_payload = can_msgs.data
             
-        elif( self.minid_dos == -1):
-            self.minid_dos = can_msgs.arb_id
-            self.minid_payload=can_msgs.data
-        
-        #print( "min can id is :",self.minid_dos)
-        
-        #store can ids and its time stamps in dictionary
-        if not(can_msgs.arb_id in self.preattack_canmsg_dict):
-            self.prev_imt = can_msgs.timestamp
-            self.preattack_canmsg_dict[can_msgs.arb_id]=[]
-            self.preattack_canmsg_dict[can_msgs.arb_id].append(can_msgs.timestamp)
-        elif can_msgs.arb_id in self.preattack_canmsg_dict:
-            self.preattack_canmsg_dict[can_msgs.arb_id].append(can_msgs.timestamp)
+                
+            elif( self.minid_dos == -1):
+                self.minid_dos = can_msgs.arb_id
+                self.minid_payload=can_msgs.data
             
+            #print( "min can id is :",self.minid_dos)
+            
+            #store can ids and its time stamps in dictionary
+            if not(can_msgs.arb_id in self.preattack_canmsg_dict):
+                self.prev_imt = can_msgs.timestamp
+                self.preattack_canmsg_dict[can_msgs.arb_id]=[]
+                self.preattack_canmsg_dict[can_msgs.arb_id].append(can_msgs.timestamp)
+            elif can_msgs.arb_id in self.preattack_canmsg_dict:
+                self.preattack_canmsg_dict[can_msgs.arb_id].append(can_msgs.timestamp)
+                
         
         if (self.attack_type == "replay"):
             """
@@ -535,12 +535,14 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
                         print(can_message.to_canplayer(amsg[current_index], busname), file=outstream)
                         current_index+= 1                    
                     print(can_message.to_canplayer(cmsg, busname), file=outstream) # combine this and first condition at end of this version  release 
-                    
-        leftover_msgs= attack.get_attack_msgs()
-        while(current_index < len(leftover_msgs)):
-            print(can_message.to_canplayer(leftover_msgs[current_index], busname), file=outstream)
-            current_index+= 1          
-                    
+        if( attack_name not in [ 'fuzzy_owrite', 'impersonation_owrite']):
+                        
+            leftover_msgs= attack.get_attack_msgs()
+
+            while(current_index < len(leftover_msgs)):
+                print(can_message.to_canplayer(leftover_msgs[current_index], busname), file=outstream)
+                current_index+= 1          
+                        
     
     end = time.time()
     print( " The time took to inject {0} attack messages and process file is {1:.4f} seconds".format(current_index,end-start))
