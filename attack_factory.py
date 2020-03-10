@@ -6,7 +6,7 @@ import sys, os
 import time
 import random
 import math
-
+from queue import Queue 
 import helper_functions
 import numpy as np
 from can_message import *
@@ -101,11 +101,14 @@ class CanMessageFactory():
         and return list of all replay attack messages
 
         """
-        x= np.random.uniform(low=start_time, high = (start_time+attack_duration), size= len(cmsgs) )
+        attack_msgs=[]
+        x= np.random.uniform(low=start_time, high = (start_time+attack_duration), size= cmsgs.qsize() )
         x.sort()  # since random function returns randomly with in range we are sorting the list
-        for i,message in  enumerate(cmsgs):
-               message.timestamp = x[i]    
-        attack_msgs = cmsgs
+        
+        for message , index in  zip(helper_functions.drain(cmsgs), range(0,cmsgs.qsize())):
+            print( " message being changed is :", message)
+            message.timestamp = x[index]    
+            attack_msgs.append(message)
         return attack_msgs
     
 
@@ -133,7 +136,8 @@ class BaseAttackModel():
         self.replay_stream=[]
         self.replay_N = 0
         self.replay_stream_length = replay_seq_window #replay_stream_length
-        
+        self.q = Queue(maxsize = 3) 
+
     def get_attack_state(self, can_msgs):
         """
         Checks and return whether attack time is started or not 
@@ -165,7 +169,16 @@ class BaseAttackModel():
         """
         This stores the previous canids and its time stamps in a dictonary 
         """
-        self.random_subset_msgs_from_stream(can_msgs)
+        # Initializing a queue 
+        if ( not self.q.full()):
+            print(" Queue is not full")
+            self.q.put(can_msgs)
+        
+        if(self.q.full()):
+               
+            print("q is full")
+            cmsg_q= copy.copy(self.q)   
+            self.random_subset_msgs_from_stream(cmsg_q)
         
         #store min can id and its payload alone
         if (self.minid_dos != -1 and can_msgs.arb_id < self.minid_dos):
@@ -193,16 +206,22 @@ class BaseAttackModel():
         #     pass
     
     
-    def random_subset_msgs_from_stream( self, cmsg ):
+    def random_subset_msgs_from_stream( self, cmsg_q ):
         
-        self.replay_N += 1
+        self.replay_N += 1 #Number of replay messages seen till now
         if len( self.replay_stream ) < self.replay_stream_length:
-            self.replay_stream.append( cmsg )
+            self.replay_stream.append( cmsg_q )
         else:
-            s = int(random.random() * self.replay_N)
-            if s < self.replay_stream_length:
-                self.replay_stream[ s ] = cmsg
-        
+            # s = int(random.random() * self.replay_N)
+            # if s < self.replay_stream_length:
+            #     self.replay_stream[ s ] = cmsg
+            probability = self.replay_stream_length/(self.replay_N +1)
+            if random.random() < probability:
+                # Select item in stream and remove one of the k items already selected
+                self.replay_stream[random.choice(range(0,int(self.replay_stream_length)))] = cmsg_q
+                print( " in random ",len( self.replay_stream))
+                print("get is ",self.q.get())
+
         
 
 class DoSAttackModel(BaseAttackModel):
@@ -361,12 +380,14 @@ class ReplayAttackModel(BaseAttackModel):
         #print( "attack state is ", self.attack_state)
         if( self.attack_state == BaseAttackModel.ATTACK_ON):
             
-            self.replay_stream
             
             cmf = CanMessageFactory()
-            self.attack_messages=cmf.create_Replay_messages(cmsgs=self.replay_stream, start_time= self.attack_start_time,\
+            
+            print( " in replay",self.replay_stream[0])
+            self.attack_messages=cmf.create_Replay_messages(cmsgs=self.replay_stream[0], start_time= self.attack_start_time,\
                                                                 attack_duration= self.attack_duration )
  
+
         return self.attack_messages
         
 

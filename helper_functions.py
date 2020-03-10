@@ -2,8 +2,7 @@
 import contextlib
 import sys, os
 import subprocess
-
-
+import queue
 
 
 
@@ -49,3 +48,11 @@ def file_len(fname):
     if p.returncode != 0:
         raise IOError(err)
     return int(result.strip().split()[0])
+
+
+def drain(q):
+  while True:
+    try:
+      yield q.get_nowait()
+    except queue.Empty:  # on python 2 use Queue.Empty
+      break
