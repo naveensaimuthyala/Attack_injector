@@ -10,8 +10,10 @@ from queue import Queue
 import helper_functions
 import numpy as np
 from can_message import *
+import collections
 
 # python3 attack_injector.py -i otids -o tes.log -a dos_vol -at 6.217975 -ad 0.5  ./short.txt 
+
 ATTACK_NOT_STARTED = 0
 ATTACK_START = 1
 ATTACK_ONGOING = 2
@@ -102,10 +104,10 @@ class CanMessageFactory():
 
         """
         attack_msgs=[]
-        x= np.random.uniform(low=start_time, high = (start_time+attack_duration), size= cmsgs.qsize() )
+        x= np.random.uniform(low=start_time, high = (start_time+attack_duration), size= len(cmsgs) )
         x.sort()  # since random function returns randomly with in range we are sorting the list
         
-        for message , index in  zip(helper_functions.drain(cmsgs), range(0,cmsgs.qsize())):
+        for message , index in  zip(cmsgs, range(0,len(cmsgs))):
             print( " message being changed is :", message)
             message.timestamp = x[index]    
             attack_msgs.append(message)
@@ -118,14 +120,13 @@ class BaseAttackModel():
     ATTACK_ALREADY_ON = 2
     ATTACK_OFF = 3
     
-    def __init__(self, attack_type,attack_start_time, attack_duration,replay_seq_window):
+    def __init__(self, attack_type,attack_start_time, attack_duration,replay_seq_window = 0, rcanid= None):
         self.min_imt = 0
         self.min_canid = 0
         self.num_msgs = 0
-        self.attack_interval = [4.0, 8.0]
         self.attack_type = attack_type
         self.attack_state = BaseAttackModel.ATTACK_OFF
-        self.attack_messages = None  # Attack messages (in a queue)
+        self.attack_messages = None  # Attack messages (in a list)
         self.preattack_canmsg_dict ={}
         self.prev_imt = 0
         self.attack_start_time = attack_start_time
@@ -133,11 +134,15 @@ class BaseAttackModel():
         self.minid_payload =[] 
         self.minid_dos =-1
         
+        ## replay attack related declarations
         self.replay_stream=[]
         self.replay_N = 0
-        self.replay_stream_length = replay_seq_window #replay_stream_length
-        self.q = Queue(maxsize = 3) 
-
+        self.number_of_queues = 1 # Number of queues to be mainted by reservoir sampling.
+        self.queue_length= int(replay_seq_window) 
+        self.q = collections.deque(maxlen=self.queue_length) #length of the queue i.e size of replay window
+        self.rcanid=rcanid
+        
+        
     def get_attack_state(self, can_msgs):
         """
         Checks and return whether attack time is started or not 
@@ -169,17 +174,7 @@ class BaseAttackModel():
         """
         This stores the previous canids and its time stamps in a dictonary 
         """
-        # Initializing a queue 
-        if ( not self.q.full()):
-            print(" Queue is not full")
-            self.q.put(can_msgs)
-        
-        if(self.q.full()):
-               
-            print("q is full")
-            cmsg_q= copy.copy(self.q)   
-            self.random_subset_msgs_from_stream(cmsg_q)
-        
+
         #store min can id and its payload alone
         if (self.minid_dos != -1 and can_msgs.arb_id < self.minid_dos):
         
@@ -191,7 +186,7 @@ class BaseAttackModel():
             self.minid_dos = can_msgs.arb_id
             self.minid_payload=can_msgs.data
         
-        print( "min can id is :",self.minid_dos)
+        #print( "min can id is :",self.minid_dos)
         
         #store can ids and its time stamps in dictionary
         if not(can_msgs.arb_id in self.preattack_canmsg_dict):
@@ -201,26 +196,48 @@ class BaseAttackModel():
         elif can_msgs.arb_id in self.preattack_canmsg_dict:
             self.preattack_canmsg_dict[can_msgs.arb_id].append(can_msgs.timestamp)
             
-        ## For replay msgs 
-        # if( self.attack_type == "replay"):
-        #     pass
-    
+        
+        if (self.attack_type == "replay"):
+            """
+            follows sliding window technique using queue on all msgs it sees
+            """              
+            # Initializing a queue 
+            if ( len(self.q) < self.queue_length ) :
+                print(" Queue is not full")
+                if( self.rcanid == -1):
+                    self.q.append(can_msgs)
+                elif ( self.rcanid == can_msgs.arb_id):
+                    self.q.append(can_msgs)
+            else:  
+                #print("q is full")
+                if( self.rcanid == -1):
+                    
+                    self.random_subset_msgs_from_stream(self.q)
+                    self.q.append(can_msgs) 
+                elif ( self.rcanid == can_msgs.arb_id):
+                    self.random_subset_msgs_from_stream(self.q)
+                    self.q.append(can_msgs)                   
+        
+
     
     def random_subset_msgs_from_stream( self, cmsg_q ):
+        """
+        This is implementation of reservoir sampling theorem to choose single Queue between stream of N Queues
+        """
         
         self.replay_N += 1 #Number of replay messages seen till now
-        if len( self.replay_stream ) < self.replay_stream_length:
+        if len( self.replay_stream ) < self.number_of_queues:
+            print(" replay ques <1")
             self.replay_stream.append( cmsg_q )
         else:
-            # s = int(random.random() * self.replay_N)
-            # if s < self.replay_stream_length:
-            #     self.replay_stream[ s ] = cmsg
-            probability = self.replay_stream_length/(self.replay_N +1)
+
+            probability = self.number_of_queues/(self.replay_N +1)
             if random.random() < probability:
                 # Select item in stream and remove one of the k items already selected
-                self.replay_stream[random.choice(range(0,int(self.replay_stream_length)))] = cmsg_q
-                print( " in random ",len( self.replay_stream))
-                print("get is ",self.q.get())
+                self.replay_stream[random.choice(range(0,int(self.number_of_queues)))] = list(cmsg_q)
+                # for i in range(0,3):
+                #     print( " in random ",self.replay_stream[0][i])
+                # print("set")
 
         
 
@@ -231,7 +248,7 @@ class DoSAttackModel(BaseAttackModel):
     """
     
     def __init__(self, attack_type,attack_start_time, attack_duration,imt_ip,busname):
-        super(DoSAttackModel, self).__init__(attack_type,attack_start_time, attack_duration)
+        super(DoSAttackModel, self).__init__(attack_type=attack_type,attack_start_time=attack_start_time, attack_duration=attack_duration)
         self.attack_type =attack_type
         # self.attack_start_time=attack_start_time
         # self.attack_duration=attack_duration
@@ -247,7 +264,9 @@ class DoSAttackModel(BaseAttackModel):
             """
 
             min_num_canid = [] #used list for future use if attack has to be injected with more than one can id.
+            
             self.canids = sorted(list(self.preattack_canmsg_dict.keys())) #Get the canid with lowest value from the dictionary 
+            
             if self.attack_type == 'dos_prio':
                 min_num_canid.append( random.randint(0, min(self.canids))) # selecting non existing minimum can id for dos prority attack
             elif self.attack_type == 'dos_vol':
@@ -367,15 +386,20 @@ class ReplayAttackModel(BaseAttackModel):
     This class manages Injection of Replay single and sequence  attack  messages on to datset 
     """
     
-    def __init__(self, attack_type,attack_start_time, attack_duration,imt_ip,busname,replay_seq_window):
-        super(ReplayAttackModel, self).__init__(attack_type,attack_start_time, attack_duration,replay_seq_window)
+    def __init__(self, attack_type,attack_start_time, attack_duration,imt_ip,busname,replay_seq_window, rcanid):
+        super(ReplayAttackModel, self).__init__(attack_type=attack_type,attack_start_time=attack_start_time, attack_duration=attack_duration, \
+                                                   replay_seq_window= replay_seq_window,rcanid= rcanid)
         self.attack_type =attack_type
         self.attack_start_time=attack_start_time
         self.attack_duration=attack_duration
-        self.imt_ip=imt_ip
+        self.imt_ip=imt_ip # if in case we have specific imt to replay attack msgs we can use this
         self.busname=busname
         
     def get_attack_msgs(self): 
+        
+        if (len(self.q) < self.queue_length):          
+            print(" The watch phase has not seen {} messages with cn id  so far".format( self.queue_length))
+            sys.exit()
         
         #print( "attack state is ", self.attack_state)
         if( self.attack_state == BaseAttackModel.ATTACK_ON):
@@ -396,7 +420,7 @@ class ReplayAttackModel(BaseAttackModel):
 
 
 
-def AttackFactory(busname, attack_type,attack_start_time,attack_duration,imt_ip,replay_seq_window):
+def AttackFactory(busname, attack_type,attack_start_time,attack_duration,imt_ip,replay_seq_window, rcanid):
     
     """
     Returns the appropriate attack model based on input attack type
@@ -413,7 +437,7 @@ def AttackFactory(busname, attack_type,attack_start_time,attack_duration,imt_ip,
                                 attack_duration =attack_duration,imt_ip= imt_ip, busname= busname)
     elif ( attack_type == 'replay'):
         return ReplayAttackModel( attack_type =attack_type, attack_start_time = attack_start_time , \
-                                attack_duration =attack_duration,imt_ip= imt_ip, busname= busname, replay_seq_window=replay_seq_window)    
+                                attack_duration =attack_duration,imt_ip= imt_ip, busname= busname, replay_seq_window=replay_seq_window, rcanid=rcanid)    
     else:
         
         return None
@@ -432,14 +456,14 @@ def write_attackmsgs_to_outfile( amsg, cmsg , current_index ,busname, outstream)
 
     
 
-def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, attack_duration, imt_ip,replay_seq_window):
+def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, attack_duration, imt_ip,replay_seq_window, rcanid):
     
     """
     This function is used to parse the infile line by line and print for now 
     """   
     start = time.time()
     current_index=0
-    attack = AttackFactory(busname, attack_name,attack_start_time,attack_duration,imt_ip,replay_seq_window)
+    attack = AttackFactory(busname, attack_name,attack_start_time,attack_duration,imt_ip,replay_seq_window,rcanid)
     
     with helper_functions.manage_output_stream(outfile) as outstream:
 
@@ -451,7 +475,7 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
                 
                 
                 if (attack.get_attack_state(cmsg)== ATTACK_NOT_STARTED):
-                    print( " sending normal msg")
+                    #print( " sending normal msg")
                     attack.watch(cmsg)
                     print(can_message.to_canplayer(cmsg, busname), file=outstream)
                     
@@ -469,7 +493,6 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
                     else:
                         
                         amsg = attack.get_attack_msgs()
-                        #write_attackmsgs_to_outfile(amsg=amsg, cmsg=cmsg, current_index= current_index, busname= busname,outstream = outstream)
                         while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
                             print("here",amsg[current_index] , current_index)
                             print(can_message.to_canplayer(amsg[current_index], busname), file=outstream)
