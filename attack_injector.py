@@ -24,7 +24,7 @@ argp.add_argument('infile', type=str, help='Trace/Template file.')
 argp.add_argument('-a', '--attacktype', type=str, default = None, help = 'dos|replay|fuzzy|impersonation')
 argp.add_argument('-at', '--attackstarttime', type=str, default= None, help = 'Attack Start Time')
 
-argp.add_argument('-ad', '--attackduration', type=str,default= None , help= 'Attack Duration')
+argp.add_argument('-ad', '--attackduration', type=str,default= 1 , help= 'Attack Duration')
 argp.add_argument('-imt','--imt', type=str, default= None, help='IMT for attack messages')
 argp.add_argument('-id', '--canid', type=str,default= -1, help= ' input can-id if required to inject \
                                                                         replay attack with particular can-id')
@@ -44,7 +44,7 @@ attacktype= args.attacktype
 rcanid= int(args.canid)
 attk_start_time= float(args.attackstarttime)
 attk_duration = float(args.attackduration)
-imt_ip=float(args.imt)
+imt_ip=args.imt
 replay_seq_window = float(args.replay_seq_length)
 no_of_times_times_to_replay = int( args.number_of_times_to_replay)
 

@@ -112,17 +112,9 @@ class CanMessageFactory():
             message_c.timestamp= start_time + (index*imt_ip)
             attack_msgs.append(message_c)
             #print( " message  changed is :", message)
-        print( " attack mgsgs",attack_msgs)
         return attack_msgs
         
-        # x= np.random.uniform(low=start_time, high = (start_time+attack_duration), size= no_of_times_times_to_replay*len(cmsgs) )
-        # x.sort()  # since random function returns randomly with in range we are sorting the list
-        
-        # for message , index in  zip(cmsgs, range(0,len(cmsgs))):
-        #     print( " message being changed is :", message)
-        #     message.timestamp = x[index]    
-        #     attack_msgs.append(message)
-        # return attack_msgs
+    
     
 
 
@@ -241,7 +233,7 @@ class BaseAttackModel():
         
         self.replay_N += 1 #Number of replay messages seen till now
         if len( self.replay_stream ) < self.number_of_queues:
-            print(" replay ques <1")
+            #print(" replay ques <1")  self.number_of_queues is always 1 because we always reply one queue which is size 1 to size  number
             self.replay_stream.append( cmsg_q )
         else:
 
@@ -249,9 +241,6 @@ class BaseAttackModel():
             if random.random() < probability:
                 # Select item in stream and remove one of the k items already selected
                 self.replay_stream[random.choice(range(0,int(self.number_of_queues)))] = list(cmsg_q)
-                # for i in range(0,3):
-                #     print( " in random ",self.replay_stream[0][i])
-                # print("set")
 
         
 
@@ -287,7 +276,7 @@ class DoSAttackModel(BaseAttackModel):
                 min_num_canid.append(min(self.canids)) # selecting existing minimum can id for dos volume attack
 
             if self.imt_ip is None:  # if imt is not specified we will calculate default imt based on min imt seen for canid
-                
+                print( " DOS IMT input is None")
                 for canid in self.canids:
                                 
                     #print("{}:before:{}".format(canid,instances_dict[canid]))
@@ -419,6 +408,7 @@ class ReplayAttackModel(BaseAttackModel):
         #print( "attack state is ", self.attack_state)
         if( self.attack_state == BaseAttackModel.ATTACK_ON):
             
+            
             if (self.imt_ip==None and len(self.q)> 1):
                 self.imt_ip = self.q[1].timestamp -self.q[0].timestamp
             elif ( len(self.q )==1 and self.imt_ip == None):
@@ -429,8 +419,8 @@ class ReplayAttackModel(BaseAttackModel):
             
             print( "replaying imt is {}".format(self.imt_ip))
 
-            print( " in replay",self.replay_stream[0])
-            self.attack_messages=cmf.create_Replay_messages(cmsgs=self.replay_stream[0], start_time= self.attack_start_time, imt_ip=self.imt_ip,\
+            #print( " in replay",self.replay_stream[0])
+            self.attack_messages=cmf.create_Replay_messages(cmsgs=self.replay_stream[0], start_time= self.attack_start_time, imt_ip=float(self.imt_ip),\
                                                                 attack_duration= self.attack_duration, no_of_times_times_to_replay=self.no_of_times_times_to_replay)
  
 
@@ -516,14 +506,11 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
                         print(can_message.to_canplayer(cmsg, busname), file=outstream)
                    
                     else:
-                        """
-                        corner case is to check whether there are any remaining lines at end of normal data line inclue them to op file
-                        """
                         
                         amsg = attack.get_attack_msgs()
                         
                         while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
-                            print("here",amsg[current_index] , current_index)
+                            #print("insertion during attack",amsg[current_index] , current_index)
                             print(can_message.to_canplayer(amsg[current_index], busname), file=outstream)
                             current_index+= 1
                         print(can_message.to_canplayer(cmsg, busname), file=outstream)
@@ -531,15 +518,17 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
                 elif(attack.get_attack_state(cmsg) == ATTACK_COMPLETED ):
                     amsg = attack.get_attack_msgs()
                     while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
-                        print("here attack end ",amsg[current_index] , current_index)
+                        #print(" inserting after  attack duration phase ",amsg[current_index] , current_index)
                         print(can_message.to_canplayer(amsg[current_index], busname), file=outstream)
                         current_index+= 1                    
                     print(can_message.to_canplayer(cmsg, busname), file=outstream) # combine this and first condition at end of this version  release 
+        
         if( attack_name not in [ 'fuzzy_owrite', 'impersonation_owrite']):
                         
             leftover_msgs= attack.get_attack_msgs()
 
             while(current_index < len(leftover_msgs)):
+                #print(" inserting at end of file",leftover_msgs[current_index] , current_index)
                 print(can_message.to_canplayer(leftover_msgs[current_index], busname), file=outstream)
                 current_index+= 1          
                         
