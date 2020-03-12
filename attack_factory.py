@@ -123,7 +123,7 @@ class BaseAttackModel():
     ATTACK_ALREADY_ON = 2
     ATTACK_OFF = 3
     
-    def __init__(self, attack_type,attack_start_time, attack_duration,replay_seq_window = 0, rcanid= None):
+    def __init__(self, attack_type,attack_start_time, attack_duration,replay_seq_window = 1, rcanid= None):
         self.min_imt = 0
         self.min_canid = 0
         self.num_msgs = 0
@@ -144,7 +144,8 @@ class BaseAttackModel():
         self.queue_length= int(replay_seq_window) 
         self.q = collections.deque(maxlen=self.queue_length) #length of the queue i.e size of replay window
         self.rcanid=rcanid
-        
+        self.single_window_imt_q = collections.deque(maxlen=2) # if only one message is selected to replay with single to cal imt this is used
+
         
     def get_attack_state(self, can_msgs):
         """
@@ -190,7 +191,7 @@ class BaseAttackModel():
                 
             elif( self.minid_dos == -1):
                 self.minid_dos = can_msgs.arb_id
-                self.minid_payload=can_msgs.data
+                self.minid_payload=can_msgs.data # we use this in dos attack msgs to send min id payload to dos_vol and dos_prio
             
             #print( "min can id is :",self.minid_dos)
             
@@ -206,7 +207,9 @@ class BaseAttackModel():
         if (self.attack_type == "replay"):
             """
             follows sliding window technique using queue on all msgs it sees
-            """              
+            """ 
+            
+                         
             # Initializing a queue 
             if ( len(self.q) < self.queue_length ) :
                 print(" Queue is not full")
@@ -214,13 +217,18 @@ class BaseAttackModel():
                     self.q.append(can_msgs)
                 elif ( self.rcanid == can_msgs.arb_id):
                     self.q.append(can_msgs)
+                    self.single_window_imt_q.append(can_msgs.timestamp)
             else:  
                 #print("q is full")
-                if( self.rcanid == -1):
+                if( self.rcanid == -1): #-1 is for default not given any specific can id input
                     
                     self.random_subset_msgs_from_stream(self.q)
                     self.q.append(can_msgs) 
                 elif ( self.rcanid == can_msgs.arb_id):
+                    self.single_window_imt_q.append(can_msgs.timestamp)
+                    if( len( self.single_window_imt_q)>1):
+                        self.min_imt = self.single_window_imt_q[1]-self.single_window_imt_q[0]
+                    
                     self.random_subset_msgs_from_stream(self.q)
                     self.q.append(can_msgs)                   
         
@@ -232,6 +240,7 @@ class BaseAttackModel():
         """
         
         self.replay_N += 1 #Number of replay messages seen till now
+        
         if len( self.replay_stream ) < self.number_of_queues:
             #print(" replay ques <1")  self.number_of_queues is always 1 because we always reply one queue which is size 1 to size  number
             self.replay_stream.append( cmsg_q )
@@ -333,13 +342,13 @@ class FuzzyAttackModel(BaseAttackModel):
             GET CAN ID IN TO ARRAY
             GET MIN IMT VALUE
             """
-            min_num_canid = [] #used list for future use if attack has to be injected with more than one can id.
+            fuzzy_random_canids = [] #used list for future use if attack has to be injected with more than one can id.
             self.canids = sorted(list(self.preattack_canmsg_dict.keys())) #Get the canid with lowest value from the dictionary 
             # if self.attack_type == 'dos_prio':
             #     min_num_canid.append( random.randint(0, min(self.canids))) # selecting non existing minimum can id for dos prority attack
             # elif self.attack_type == 'dos_vol':
             
-            min_num_canid.append(min(self.canids)) # selecting existing minimum can id for dos volume attack
+            fuzzy_random_canids.append(random.choice(self.canids)) # selecting existing minimum can id for dos volume attack
 
             if self.imt_ip is None:  # if imt is not specified we will calculate default imt based on min imt seen for canid
                 
@@ -364,7 +373,7 @@ class FuzzyAttackModel(BaseAttackModel):
                 
             
             cmf = CanMessageFactory()
-            self.attack_messages = cmf.create_Fuzzy_messages(canids=min_num_canid,src_imt=self.min_imt, start_time = self.attack_start_time, \
+            self.attack_messages = cmf.create_Fuzzy_messages(canids=fuzzy_random_canids,src_imt=self.min_imt, start_time = self.attack_start_time, \
                                                             attack_length= self.attack_duration,busname= self.busname)
             
             self.preattack_canmsg_dict.clear()
@@ -401,8 +410,8 @@ class ReplayAttackModel(BaseAttackModel):
         
     def get_attack_msgs(self): 
         
-        if (len(self.q) < self.queue_length):          
-            print(" The watch phase has not seen {} messages with cn id  so far".format( self.queue_length))
+        if (len(self.q) < self.queue_length and self.rcanid):          
+            print("The watch phase has not seen {} messages with can id {} so far".format(self.queue_length,self.rcanid))
             sys.exit()
         
         #print( "attack state is ", self.attack_state)
@@ -410,11 +419,13 @@ class ReplayAttackModel(BaseAttackModel):
             
             
             if (self.imt_ip==None and len(self.q)> 1):
-                self.imt_ip = self.q[1].timestamp -self.q[0].timestamp
-            elif ( len(self.q )==1 and self.imt_ip == None):
-                print(" Please provoide IMT if it is single message replay ")
-                sys.exit()
-            
+                self.imt_ip = self.q[1].timestamp -self.q[0].timestamp  # difference of first two messages timestamps    
+            elif ( len(self.q )==1 and self.imt_ip == None and self.min_imt == 0 ):
+                self.imt_ip = helper_functions.query_yes_no( "  IMT input is not provided and we have seen only one message so far \n")
+            elif (( len(self.q )==1 and self.imt_ip == None and self.rcanid)):
+                print( "Choosing imt from messages of can id {}".format(self.rcanid))
+                self.imt_ip = self.min_imt
+           
             cmf = CanMessageFactory()
             
             print( "replaying imt is {}".format(self.imt_ip))
@@ -459,27 +470,10 @@ def AttackFactory(busname, attack_type,attack_start_time,attack_duration,imt_ip,
 
 
 
-def write_attackmsgs_to_outfile( amsg, cmsg , current_index ,busname, outstream):
+def write_attackmsgs_to_outfile(parser,file,outfile,busname, attack_name ,attack):
       
-    
-    while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
-        print("here",amsg[current_index] , current_index)
-        print(can_message.to_canplayer(amsg[current_index], busname), file=outstream)
-        current_index+= 1
-    return
-
-    
-
-def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, attack_duration, imt_ip,replay_seq_window, rcanid, \
-                     no_of_times_times_to_replay):
-    
-    """
-    This function is used to parse the infile line by line and print for now 
-    """   
-    start = time.time()
     current_index=0
-    attack = AttackFactory(busname, attack_name,attack_start_time,attack_duration,imt_ip,replay_seq_window,rcanid, no_of_times_times_to_replay)
-    
+
     with helper_functions.manage_output_stream(outfile) as outstream:
 
         with open(file, "r") as ifile:
@@ -487,8 +481,7 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
             
             for line in ifile:
                 cmsg = parser(line)
-                
-                
+                print(cmsg)
                 if (attack.get_attack_state(cmsg)== ATTACK_NOT_STARTED):
                     #print( " sending normal msg")
                     attack.watch(cmsg)
@@ -510,7 +503,7 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
                         amsg = attack.get_attack_msgs()
                         
                         while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
-                            #print("insertion during attack",amsg[current_index] , current_index)
+                            print("insertion during attack",amsg[current_index] , current_index)
                             print(can_message.to_canplayer(amsg[current_index], busname), file=outstream)
                             current_index+= 1
                         print(can_message.to_canplayer(cmsg, busname), file=outstream)
@@ -518,7 +511,7 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
                 elif(attack.get_attack_state(cmsg) == ATTACK_COMPLETED ):
                     amsg = attack.get_attack_msgs()
                     while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
-                        #print(" inserting after  attack duration phase ",amsg[current_index] , current_index)
+                        print(" inserting after  attack duration phase ",amsg[current_index] , current_index)
                         print(can_message.to_canplayer(amsg[current_index], busname), file=outstream)
                         current_index+= 1                    
                     print(can_message.to_canplayer(cmsg, busname), file=outstream) # combine this and first condition at end of this version  release 
@@ -528,10 +521,28 @@ def inject_attack(parser,file,outfile,busname, attack_name, attack_start_time, a
             leftover_msgs= attack.get_attack_msgs()
 
             while(current_index < len(leftover_msgs)):
-                #print(" inserting at end of file",leftover_msgs[current_index] , current_index)
+                print(" inserting at end of file",leftover_msgs[current_index] , current_index)
                 print(can_message.to_canplayer(leftover_msgs[current_index], busname), file=outstream)
-                current_index+= 1          
-                        
+                current_index+= 1
+    return current_index   
+      
+  
+
     
+
+def inject_attack(parser,infile,outfile,busname, attack_name, attack_start_time, attack_duration, imt_ip,replay_seq_window, rcanid, \
+                     no_of_times_times_to_replay):
+    
+    """
+    This function is used to parse the infile line by line and print for now 
+    """   
+    start = time.time()
+    if( attack_name in [ 'dos_vol', 'dos_prio','fuzzy_ins', 'fuzzy_owrite', 'replay']):
+        
+    
+        attack = AttackFactory(busname, attack_name,attack_start_time,attack_duration,imt_ip,replay_seq_window,rcanid, no_of_times_times_to_replay)
+        
+        no_of_attkmsgs_inserted = write_attackmsgs_to_outfile(parser,infile,outfile,busname, attack_name,attack)
+                            
     end = time.time()
-    print( " The time took to inject {0} attack messages and process file is {1:.4f} seconds".format(current_index,end-start))
+    print( " The time took to inject {0} attack messages and process file is {1:.4f} seconds".format(no_of_attkmsgs_inserted,end-start))

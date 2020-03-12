@@ -56,3 +56,43 @@ def drain(q):
       yield q.get_nowait()
     except queue.Empty:  # on python 2 use Queue.Empty
       break
+
+
+
+def query_yes_no(question, default=float(0.01)):
+    
+    """Ask a yes/no question via input() and return their answer.
+
+    "question" is a string that is presented to the user.
+    "default" is the presumed answer if the user just hits <Enter>.
+        It must be "yes" (the default), "no" or None (meaning
+        an answer is required of the user).
+
+    The "answer" returns imt  value .
+    """
+    
+    valid = {"yes": float(0.01), "y": float(0.01), "ye": float(0.01)}
+    if default is None:
+        prompt = " [y/n] "
+    elif default == float(0.01):
+        prompt = " Do you want to continue with default value imt(0.01) [y/n] : "
+    elif default == "no":
+        prompt = " [y/N] "
+    else:
+        raise ValueError("invalid default answer: '%s'" % default)
+
+    while True:
+        sys.stdout.write(question + prompt)
+        choice = input().lower()
+        
+        if default is not None and choice == '':
+            print( " Choosing default IMT 0.01")
+            return default
+        elif choice in valid:
+            return valid[choice]
+        
+        elif choice in [ 'no', 'NO', 'n']:
+            return float(input(" Please respond with IMT value:"))
+        else:
+            sys.stdout.write("Please respond with 'yes' or 'no' "
+                             "(or 'y' or 'n').\n")

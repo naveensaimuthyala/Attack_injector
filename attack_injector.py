@@ -21,7 +21,7 @@ argp.add_argument('-b', '--bus', type=str, default='vcan1', help='CAN bus interf
 argp.add_argument('-i', '--informat', type=str, default='otids', help='otids|csv|canshort|canlong')
 argp.add_argument('-o', '--outfile', type=str, default=None, help='Optional output file')
 argp.add_argument('infile', type=str, help='Trace/Template file.')
-argp.add_argument('-a', '--attacktype', type=str, default = None, help = 'dos|replay|fuzzy|impersonation')
+argp.add_argument('-a', '--attacktype', type=str, default = None, help = 'dos[dos_vol, dos_prio]|replay|fuzzy[fuzzy_ins, fuzzy_owrite]|impersonation')
 argp.add_argument('-at', '--attackstarttime', type=str, default= None, help = 'Attack Start Time')
 
 argp.add_argument('-ad', '--attackduration', type=str,default= 1 , help= 'Attack Duration')
