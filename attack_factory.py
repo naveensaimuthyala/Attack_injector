@@ -224,13 +224,21 @@ class BaseAttackModel():
                     
                     self.random_subset_msgs_from_stream(self.q)
                     self.q.append(can_msgs) 
+                
                 elif ( self.rcanid == can_msgs.arb_id):
+                    
                     self.single_window_imt_q.append(can_msgs.timestamp)
+                    
                     if( len( self.single_window_imt_q)>1):
                         self.min_imt = self.single_window_imt_q[1]-self.single_window_imt_q[0]
                     
                     self.random_subset_msgs_from_stream(self.q)
-                    self.q.append(can_msgs)                   
+                    self.q.append(can_msgs)
+                    
+                else:
+                    
+                    self.random_subset_msgs_from_stream(self.q)
+                                       
         
 
     
@@ -242,7 +250,7 @@ class BaseAttackModel():
         self.replay_N += 1 #Number of replay messages seen till now
         
         if len( self.replay_stream ) < self.number_of_queues:
-            #print(" replay ques <1")  self.number_of_queues is always 1 because we always reply one queue which is size 1 to size  number
+            print(" replay ques <1")  #self.number_of_queues is always 1 because we always reply one queue which is size 1 to size  number
             self.replay_stream.append( cmsg_q )
         else:
 
@@ -485,7 +493,7 @@ def write_attackmsgs_to_outfile(parser,file,outfile,busname, attack_name ,attack
                 if (attack.get_attack_state(cmsg)== ATTACK_NOT_STARTED):
                     #print( " sending normal msg")
                     attack.watch(cmsg)
-                    print(can_message.to_canplayer(cmsg, busname), file=outstream)
+                    print(can_message.to_canplayer(cmsg, busname), file=outstream, flush=True)
                     
                 
                 elif (attack.get_attack_state(cmsg) == ATTACK_START): ## Change the ATTACK_START macro to ATTACK_PHASE
@@ -496,7 +504,7 @@ def write_attackmsgs_to_outfile(parser,file,outfile,busname, attack_name ,attack
                         
                         
                         cmsg = attack.get_owrite_attack_msgs(cmsg)
-                        print(can_message.to_canplayer(cmsg, busname), file=outstream)
+                        print(can_message.to_canplayer(cmsg, busname), file=outstream, flush=True)
                    
                     else:
                         
@@ -504,17 +512,17 @@ def write_attackmsgs_to_outfile(parser,file,outfile,busname, attack_name ,attack
                         
                         while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
                             print("insertion during attack",amsg[current_index] , current_index)
-                            print(can_message.to_canplayer(amsg[current_index], busname), file=outstream)
+                            print(can_message.to_canplayer(amsg[current_index], busname), file=outstream, flush=True)
                             current_index+= 1
-                        print(can_message.to_canplayer(cmsg, busname), file=outstream)
+                        print(can_message.to_canplayer(cmsg, busname), file=outstream, flush=True)
 
                 elif(attack.get_attack_state(cmsg) == ATTACK_COMPLETED ):
                     amsg = attack.get_attack_msgs()
                     while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
                         print(" inserting after  attack duration phase ",amsg[current_index] , current_index)
-                        print(can_message.to_canplayer(amsg[current_index], busname), file=outstream)
+                        print(can_message.to_canplayer(amsg[current_index], busname), file=outstream, flush=True)
                         current_index+= 1                    
-                    print(can_message.to_canplayer(cmsg, busname), file=outstream) # combine this and first condition at end of this version  release 
+                    print(can_message.to_canplayer(cmsg, busname), file=outstream, flush=True) # combine this and first condition at end of this version  release 
         
         if( attack_name not in [ 'fuzzy_owrite', 'impersonation_owrite']):
                         
@@ -522,7 +530,7 @@ def write_attackmsgs_to_outfile(parser,file,outfile,busname, attack_name ,attack
 
             while(current_index < len(leftover_msgs)):
                 print(" inserting at end of file",leftover_msgs[current_index] , current_index)
-                print(can_message.to_canplayer(leftover_msgs[current_index], busname), file=outstream)
+                print(can_message.to_canplayer(leftover_msgs[current_index], busname), file=outstream, flush=True)
                 current_index+= 1
     return current_index   
       
@@ -537,10 +545,11 @@ def inject_attack(parser,infile,outfile,busname, attack_name, attack_start_time,
     This function is used to parse the infile line by line and print for now 
     """   
     start = time.time()
-    if( attack_name in [ 'dos_vol', 'dos_prio','fuzzy_ins', 'fuzzy_owrite', 'replay']):
-        
     
+    if( attack_name in [ 'dos_vol', 'dos_prio','fuzzy_ins', 'fuzzy_owrite', 'replay']):
+            
         attack = AttackFactory(busname, attack_name,attack_start_time,attack_duration,imt_ip,replay_seq_window,rcanid, no_of_times_times_to_replay)
+                        
         
         no_of_attkmsgs_inserted = write_attackmsgs_to_outfile(parser,infile,outfile,busname, attack_name,attack)
                             
