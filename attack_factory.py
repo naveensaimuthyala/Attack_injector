@@ -212,7 +212,7 @@ class BaseAttackModel():
                          
             # Initializing a queue 
             if ( len(self.q) < self.queue_length ) :
-                print(" Queue is not full")
+                #print(" Queue is not full")
                 if( self.rcanid == -1):
                     self.q.append(can_msgs)
                 elif ( self.rcanid == can_msgs.arb_id):
@@ -311,7 +311,7 @@ class DoSAttackModel(BaseAttackModel):
             elif self.imt_ip is not None:
                 
                 self.min_imt= float(self.imt_ip)
-
+                print( " The imt being injected is ", self.min_imt)
                 
             
             cmf = CanMessageFactory()
@@ -483,55 +483,71 @@ def write_attackmsgs_to_outfile(parser,file,outfile,busname, attack_name ,attack
     current_index=0
 
     with helper_functions.manage_output_stream(outfile) as outstream:
-
-        with open(file, "r") as ifile:
-                       
-            
-            for line in ifile:
-                cmsg = parser(line)
-                print(cmsg)
-                if (attack.get_attack_state(cmsg)== ATTACK_NOT_STARTED):
-                    #print( " sending normal msg")
-                    attack.watch(cmsg)
-                    print(can_message.to_canplayer(cmsg, busname), file=outstream, flush=True)
-                    
-                
-                elif (attack.get_attack_state(cmsg) == ATTACK_START): ## Change the ATTACK_START macro to ATTACK_PHASE
-                    
-                    
-                    
-                    if (attack_name  in ['fuzzy_owrite', 'impersonation_owrite']):
-                        
-                        
-                        cmsg = attack.get_owrite_attack_msgs(cmsg)
-                        print(can_message.to_canplayer(cmsg, busname), file=outstream, flush=True)
-                   
-                    else:
-                        
-                        amsg = attack.get_attack_msgs()
-                        
-                        while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
-                            print("insertion during attack",amsg[current_index] , current_index)
-                            print(can_message.to_canplayer(amsg[current_index], busname), file=outstream, flush=True)
-                            current_index+= 1
-                        print(can_message.to_canplayer(cmsg, busname), file=outstream, flush=True)
-
-                elif(attack.get_attack_state(cmsg) == ATTACK_COMPLETED ):
-                    amsg = attack.get_attack_msgs()
-                    while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
-                        print(" inserting after  attack duration phase ",amsg[current_index] , current_index)
-                        print(can_message.to_canplayer(amsg[current_index], busname), file=outstream, flush=True)
-                        current_index+= 1                    
-                    print(can_message.to_canplayer(cmsg, busname), file=outstream, flush=True) # combine this and first condition at end of this version  release 
         
-        if( attack_name not in [ 'fuzzy_owrite', 'impersonation_owrite']):
+        with open(outfile.replace(".log",".gtt"), 'w') as f:
+            
+            with open(file, "r") as ifile:
                         
-            leftover_msgs= attack.get_attack_msgs()
+                
+                for line in ifile:
+                    cmsg = parser(line)
+                    if (attack.get_attack_state(cmsg)== ATTACK_NOT_STARTED):
+                        #print( " sending normal msg", cmsg)
+                        attack.watch(cmsg)
+                        print(can_message.to_canplayer(cmsg, busname), file=outstream, flush=True)
+                        print( "{},{},{}".format(cmsg.timestamp, 'R',"-"), file= f, flush= True)
+                    
+                    elif (attack.get_attack_state(cmsg) == ATTACK_START): ## Change the ATTACK_START macro to ATTACK_PHASE
+                        
+                        
+                        if (attack_name  in ['fuzzy_owrite', 'impersonation_owrite']):
+                            
+                            
+                            cmsg = attack.get_owrite_attack_msgs(cmsg)
+                            print(can_message.to_canplayer(cmsg, busname), file=outstream, flush=True)
+                            print( "{},{},{}".format(cmsg.timestamp, 'Seq-A',"-"), file= f, flush= True)
 
-            while(current_index < len(leftover_msgs)):
-                print(" inserting at end of file",leftover_msgs[current_index] , current_index)
-                print(can_message.to_canplayer(leftover_msgs[current_index], busname), file=outstream, flush=True)
-                current_index+= 1
+                        else:
+                            
+                            amsg = attack.get_attack_msgs()
+                            
+                            while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
+                                print("insertion during attack",amsg[current_index] , current_index)
+                                print(can_message.to_canplayer(amsg[current_index], busname), file=outstream, flush=True)
+                                print( "{},{},Msg-{}".format(cmsg.timestamp, 'Seq-A',current_index), file= f, flush= True)
+
+                                current_index+= 1
+                            print(can_message.to_canplayer(cmsg, busname), file=outstream, flush=True)
+                            print( "{},{},{}".format(cmsg.timestamp, 'R',"-"), file= f, flush= True)
+                    
+                    elif(attack.get_attack_state(cmsg) == ATTACK_COMPLETED ):
+                        
+                        if( attack_name  in [ 'fuzzy_owrite', 'impersonation_owrite']):
+                            print(can_message.to_canplayer(cmsg, busname), file=outstream, flush=True)
+                            print( "{},{},{}".format(cmsg.timestamp, 'R',"-"), file= f, flush= True)
+                            
+                        else:
+                                                      
+                            amsg = attack.get_attack_msgs()
+                            while((current_index< len(amsg) )and (amsg[current_index].timestamp <= cmsg.timestamp)):
+                                print(" inserting after  attack duration phase ",amsg[current_index] , current_index)
+                                print(can_message.to_canplayer(amsg[current_index], busname), file=outstream, flush=True)
+                                print( "{},{},Msg-{}".format(cmsg.timestamp, 'Seq-A',current_index), file= f, flush= True)
+
+                                current_index+= 1                    
+                            print(can_message.to_canplayer(cmsg, busname), file=outstream, flush=True) # combine this and first condition at end of this version  release 
+                            print( "{},{},{}".format(cmsg.timestamp, 'R',"-"), file= f, flush= True)
+            
+            if( attack_name not in [ 'fuzzy_owrite', 'impersonation_owrite']):
+                            
+                leftover_msgs= attack.get_attack_msgs()
+
+                while(current_index < len(leftover_msgs)):
+                    print(" inserting at end of file",leftover_msgs[current_index] , current_index)
+                    print(can_message.to_canplayer(leftover_msgs[current_index], busname), file=outstream, flush=True)
+                    print( "{},{},Msg-{}".format(cmsg.timestamp, 'Seq-A',current_index), file= f, flush= True)
+
+                    current_index+= 1
     return current_index   
       
   

@@ -1,0 +1,14 @@
+{
+    "attackduration": "0.5",
+    "attackstarttime": "1447973176.636462",
+    "attacktype": "replay",
+    "bus": "vcan1",
+    "canid": "-1",
+    "imt": "0.001",
+    "infile": "validation/serdump-2015-11-19_174616_id152_a/serdump-2015-11-19_174616_id152_a.log",
+    "informat": "canshort",
+    "number_of_times_to_replay": "500",
+    "outfile": null,
+    "replay_seq_length": "1",
+    "test_name": "validation/serdump-2015-11-19_174616_id152_a/test1"
+}

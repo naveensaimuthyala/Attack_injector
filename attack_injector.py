@@ -5,7 +5,7 @@ import argparse
 import can_message
 import pandas as pd
 import attack_factory
-
+import json
 
 
 parsers = {
@@ -30,14 +30,30 @@ argp.add_argument('-id', '--canid', type=str,default= -1, help= ' input can-id i
                                                                         replay attack with particular can-id')
 argp.add_argument('-w', '--replay_seq_length', type=str, default = 1, help= " replay sequence window size" )
 argp.add_argument('-rn', '--number_of_times_to_replay', type=str, default = 1, help= " replay sequence window size" )
+argp.add_argument('-t', '--test_name', type=str, default= None, help=" testname" )
 
 
 
 
 args = argp.parse_args()
 
+test_name = args.test_name
+
+print( "ou in attackinj",  args.attacktype)
+
+if not os.path.exists(test_name):
+    os.makedirs(test_name)
+    
 infile = args.infile
-outfile = args.outfile
+inp_head, inp_tail = os.path.split(infile)
+
+#test_head , test_tail = os.path.split(test_name)
+
+outfile = test_name+"/"+inp_tail.replace(".log",".").replace(".txt",".")+str(args.attacktype)+".log"
+
+#outfile = test_name+"/"+inp_tail.replace(".log",".").replace(".txt",".")+str(args.attacktype)+"_"+test_tail+".log"
+
+
 busname = args.bus
 infrmt = args.informat
 attacktype= args.attacktype
@@ -53,6 +69,10 @@ if infrmt not in parsers:
     sys.exit(1)
 parser = parsers[infrmt]
 
+inp_args_data= vars(args)
+## save the command line arguments given to json file
+with open(outfile.replace(".log","")+'_params.json', 'w') as fp:
+    json.dump(inp_args_data, fp, sort_keys=True, indent=4)
 
 # in attack factory file we wrote a fucntion to parse input file and convert it to related parameters like corresponding timestamps , payload etc..
 
