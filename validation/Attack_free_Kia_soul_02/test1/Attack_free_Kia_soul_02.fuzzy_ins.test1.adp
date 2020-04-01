@@ -1,0 +1,1 @@
+dad_agent/dadpoc -t validation/Attack_free_Kia_soul_02/Attack_free_Kia_soul_02.log -m validation/Attack_free_Kia_soul_02/test1/Attack_free_Kia_soul_02.fuzzy_ins.log -B 5 -R 8 -W 10 -C 0.15 -D 0.0075 -P 0.01 -i -e -n test1

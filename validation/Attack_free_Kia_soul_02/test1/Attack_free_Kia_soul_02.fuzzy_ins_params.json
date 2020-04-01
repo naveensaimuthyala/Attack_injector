@@ -1,0 +1,14 @@
+{
+    "attackduration": "2",
+    "attackstarttime": "2.487363",
+    "attacktype": "fuzzy_ins",
+    "bus": "vcan1",
+    "canid": -1,
+    "imt": null,
+    "infile": "validation/Attack_free_Kia_soul_02/Attack_free_Kia_soul_02.log",
+    "informat": "canshort",
+    "number_of_times_to_replay": 1,
+    "outfile": null,
+    "replay_seq_length": 1,
+    "test_name": "validation/Attack_free_Kia_soul_02/test1"
+}

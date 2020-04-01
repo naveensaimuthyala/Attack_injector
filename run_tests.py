@@ -1,6 +1,7 @@
 import subprocess , os
 import json
 import sys
+import shutil
 
 
 def SubDirPath (d):
@@ -8,7 +9,7 @@ def SubDirPath (d):
 
 
 class Test_params:
-    def __init__( self, d,j,test_item):
+    def __init__( self, d,j,items):
         self.d = d
         self.j = j      
         self.test_name   = items['name']
@@ -33,6 +34,7 @@ class Test_params:
         
         self.attack_inj_arguments =""
         self.dad_arguments = ""
+        
     def attack_inj_params ( self):
            
         if self.attack_name in ["dos_vol" , "dos_prio", "fuzzy_ins"]:
@@ -69,11 +71,9 @@ class Test_params:
                  attack_inj_arguments = "python3,attack_injector.py,-i,{},-a,{},-at,{},-ad,{},-id,{},-imt,{},-w,{},-rn,{},-t,{},{}"\
                     .format(self.informat,self.attack_name,self.attack_start_time,\
                         self.attack_duration, self.can_id,self.imt, self.replay_seq_length, self.number_of_times_to_replay,\
-                            self.d+'/'+self.test_name, self.d+'/'+self.j['Testfile']['name']+'.log')               
+                            self.d+'/'+self.test_name, self.d+'/'+self.j['Testfile']['name']+'.log') 
+                    
                 
-                
-
-    
         return attack_inj_arguments
     
     def dad_agent_params( self):
@@ -102,11 +102,27 @@ class Test_params:
             sys.exit()
             
 
-        return  dad_arguments        
+        return  dad_arguments       
+    
+    
+    def dad_validator_params(self):
+        
+        validator_arguments = "python3,dad_validator/dad-validator.py,-t,{},-a,{},-d,{},-I,-H"\
+            .format( self.d+"/"+self.test_name+"/"+self.j['Testfile']['name'],self.attack_name,self.test_name)
+                
+        return validator_arguments
                                       
             
             
-            
+def remove_file_if_exists(filename):
+    if os.path.isfile(filename):
+        try:
+            print("File already exists- overwriting {}".format(os.path.basename(filename)))
+            os.remove(filename)
+        except OSError:
+            pass
+        
+             
 
 
 
@@ -140,6 +156,36 @@ for d in test_dir:
             dad_result = subprocess.run(dad_agent_list,env={'PATH': '/dad_agent/dadpoc'},stdout=subprocess.PIPE)
             dad_result = dad_result.stdout.decode('utf-8')
             print(dad_result)
+            
+            
+            full_path = os.path.dirname(os.path.abspath(__file__))
+            dad_agent_dest_path = full_path+"/"+test_obj.d+"/"+test_obj.test_name
+
+            adp_file_curr_path = test_obj.j['Testfile']['name']+"."+test_obj.attack_name+"."+test_obj.test_name+"."+"adp"
+            dad_file_curr_path = test_obj.j['Testfile']['name']+"."+test_obj.attack_name+"."+test_obj.test_name+"."+"dad"
+            dad_log_curr_path= test_obj.j['Testfile']['name']+"."+test_obj.attack_name+"."+test_obj.test_name+"."+"dad-log"
+            
+            dad_files = [adp_file_curr_path, dad_file_curr_path , dad_log_curr_path]
+            #Move all dad-agent created files to validation/dataset/test<n> directory
+
+            for dad_agent_file in dad_files:
+                
+                chck_file_exists = dad_agent_dest_path+"/"+os.path.basename(dad_agent_file)
+                remove_file_if_exists(chck_file_exists)   #Remove file if it is existing inplace already                 
+                dad_agent_file = full_path+"/"+dad_agent_file
+                shutil.move( dad_agent_file , dad_agent_dest_path)
+            
+            
+            
+            validator_arg = test_obj.dad_validator_params()
+            varg_list= list(validator_arg.split(","))
+
+            print("attackname path",varg_list)
+           
+            validator_res =subprocess.Popen(varg_list ,stdout=subprocess.PIPE)           
+            stdout = validator_res.communicate()[0]
+            dad_validator_res = stdout.decode('utf-8')
+            print(dad_validator_res)           
 
                 
                 

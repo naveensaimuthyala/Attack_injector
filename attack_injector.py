@@ -3,7 +3,6 @@ import sys, os
 import time
 import argparse
 import can_message
-import pandas as pd
 import attack_factory
 import json
 
