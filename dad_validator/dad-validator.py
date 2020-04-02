@@ -156,6 +156,8 @@ parser.add_argument('-I', '--imt', help='Show IMT results.', action='store_true'
 parser.add_argument('-H', '--entropy', help='Show Entropy results.', action='store_true')
 parser.add_argument('-T', '--html', type=str, default=None, help='HTML Output File')
 parser.add_argument('-C', '--caption', type=str, default=None, help='HTML File Caption')
+parser.add_argument('-p','--dad_file_path', type=str, default=None, help='Dadfile Folder for Test Suite')
+
 
 args = parser.parse_args()
 
@@ -187,12 +189,15 @@ class gtt_line_obj():
             print("GTT Error readling line ", parts)    
     
 
+base_trace_name= os.path.basename(args.tracename)
+
 trace_attack_log = args.tracename + "." + args.attackname + ".log"
 trace_attack_gt = args.tracename + "." + args.attackname + ".gtt"
-dad_output = args.tracename + "." + args.attackname + "." + args.dadtest + ".dad"
-val_log = args.tracename + "." + args.attackname + "." + args.dadtest + ".vlog"
-val_cm = args.tracename + "." + args.attackname + "." + args.dadtest + ".cm"
-val_html = args.tracename + "." + args.attackname + "." + args.dadtest + ".html"
+
+dad_output = args.dad_file_path+"/"+base_trace_name + "." + args.attackname + "." + args.dadtest + ".dad"
+val_log = args.dad_file_path+"/"+base_trace_name+ "." + args.attackname + "." + args.dadtest + ".vlog"
+val_cm = args.dad_file_path+"/"+base_trace_name+ "." + args.attackname + "." + args.dadtest + ".cm"
+val_html = args.dad_file_path+"/"+base_trace_name + "." + args.attackname + "." + args.dadtest + ".html"
 
 print("Trace attack log = ", trace_attack_log)
 print("Trace attack ground truth = ", trace_attack_gt)

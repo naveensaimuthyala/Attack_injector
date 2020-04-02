@@ -2,13 +2,13 @@ import subprocess , os
 import json
 import sys
 import shutil
-
+import argparse
 
 def SubDirPath (d):
     return list(filter(os.path.isdir, [os.path.join(d,f) for f in os.listdir(d)]))
 
 
-class Test_params:
+class Attack_inj_params:
     def __init__( self, d,j,items):
         self.d = d
         self.j = j      
@@ -22,20 +22,20 @@ class Test_params:
         self.replay_seq_length = items['replay_seq_length']
         self.number_of_times_to_replay = items['number_of_times_to_replay']
         
-        self.dad_imt = items['dad_imt']
-        self.dad_entropy = items['dad_entropy']
-        
-        self.anom_bckof_rate = items[ 'B']
-        self.anom_threshold = items['R']
-        self.window_threshold = items['W']
-        self.time_win_eps = items['C']
-        self.dbscan_win_size = items['D']
-        self.dbscan_cluster_len = items['P']
+
         
         self.attack_inj_arguments =""
-        self.dad_arguments = ""
+       
         
     def attack_inj_params ( self):
+        
+        attck_file=os.path.isfile(self.d+'/'+self.test_name+"/"+self.j['Testfile']['name']+"."+self.attack_name+".log")
+        gnd_truth_file=os.path.isfile(self.d+'/'+self.test_name+"/"+self.j['Testfile']['name']+"."+self.attack_name+".gtt")
+        params_file=os.path.isfile(self.d+'/'+self.test_name+"/"+self.j['Testfile']['name']+"."+self.attack_name+"_params.json")
+        
+        if( attck_file and gnd_truth_file and params_file):
+            return "already exists"
+        
            
         if self.attack_name in ["dos_vol" , "dos_prio", "fuzzy_ins"]:
             
@@ -76,6 +76,33 @@ class Test_params:
                 
         return attack_inj_arguments
     
+
+    
+
+  
+  
+                                      
+class Dad_agent_params:
+    def __init__(self,d,j,items, dad_test):
+        
+        self.d = d
+        self.j = j      
+        self.test_name   = items['name']
+        self.attack_name = items['attack']
+        self.dad_test_name = dad_test['dad_test_name']
+        self.dad_imt = dad_test['dad_imt']
+        self.dad_entropy = dad_test['dad_entropy']
+        
+        self.anom_bckof_rate = dad_test[ 'B']
+        self.anom_threshold = dad_test['R']
+        self.window_threshold = dad_test['W']
+        self.time_win_eps = dad_test['C']
+        self.dbscan_win_size = dad_test['D']
+        self.dbscan_cluster_len = dad_test['P']      
+        self.dad_arguments = ""
+         
+
+
     def dad_agent_params( self):
         
         if (self.dad_imt == "1" and self.dad_entropy == "1"):
@@ -103,16 +130,18 @@ class Test_params:
             
 
         return  dad_arguments       
+
+
+    def dad_validator_params(self, dad_file_path):
     
-    
-    def dad_validator_params(self):
-        
-        validator_arguments = "python3,dad_validator/dad-validator.py,-t,{},-a,{},-d,{},-I,-H"\
-            .format( self.d+"/"+self.test_name+"/"+self.j['Testfile']['name'],self.attack_name,self.test_name)
+        validator_arguments = "python3,dad_validator/dad-validator.py,-t,{},-a,{},-d,{},-p,{},-I,-H"\
+            .format( self.d+"/"+self.test_name+"/"+self.j['Testfile']['name'],self.attack_name,self.test_name,dad_file_path)
                 
         return validator_arguments
-                                      
-            
+    
+ 
+ 
+ 
             
 def remove_file_if_exists(filename):
     if os.path.isfile(filename):
@@ -122,70 +151,95 @@ def remove_file_if_exists(filename):
         except OSError:
             pass
         
-             
+def create_directory_ifnot_exists(directory):
+    
+    if not os.path.exists(directory): 
+        os.makedirs(directory)
+         
+
+argp = argparse.ArgumentParser(description='This File is intented to Run Multiple tests sequentially')
+argp.add_argument('-c', '--clean', type=str, default='N', help=' Cleans all files Yes|Y|No|N')
 
 
+args = argp.parse_args()
 
+clean_command = args.clean
 
+    
+    
 test_dir= SubDirPath('validation')
+
+if( clean_command in ["Y", "yes"]):
+    pass # have to implement deletion 
+    
+
+
 
 for d in test_dir:
 
     with open (d+'/'+'test.json') as f:
         j = json.load(f)
         for items in j['Testfile']['Tests']:
-            print(items)
+            print(items['dad_tests'])
                                   
-            test_obj=Test_params(d,j,items)
+            attack_inj_arg=Attack_inj_params(d,j,items)
             
-            inj_params= test_obj.attack_inj_params()
+            inj_params= attack_inj_arg.attack_inj_params()
             print( "obj",inj_params)
-        
-            attack_inj_list = list(inj_params.split(","))
+            if inj_params != "already exists":    
+                attack_inj_list = list(inj_params.split(","))
 
-            inj_result = subprocess.run(attack_inj_list, stdout=subprocess.PIPE)
-            inj_result = inj_result.stdout.decode('utf-8')
-            print(inj_result)
+                inj_result = subprocess.run(attack_inj_list, stdout=subprocess.PIPE)
+                inj_result = inj_result.stdout.decode('utf-8')
+                print(inj_result)
+            else:
+                print("***Skipping Generation of attack file***")
             
-            dad_params = test_obj.dad_agent_params()
-            
-            print("dad_p",dad_params)
-            
-            dad_agent_list= list(dad_params.split(","))
-
-            dad_result = subprocess.run(dad_agent_list,env={'PATH': '/dad_agent/dadpoc'},stdout=subprocess.PIPE)
-            dad_result = dad_result.stdout.decode('utf-8')
-            print(dad_result)
-            
-            
-            full_path = os.path.dirname(os.path.abspath(__file__))
-            dad_agent_dest_path = full_path+"/"+test_obj.d+"/"+test_obj.test_name
-
-            adp_file_curr_path = test_obj.j['Testfile']['name']+"."+test_obj.attack_name+"."+test_obj.test_name+"."+"adp"
-            dad_file_curr_path = test_obj.j['Testfile']['name']+"."+test_obj.attack_name+"."+test_obj.test_name+"."+"dad"
-            dad_log_curr_path= test_obj.j['Testfile']['name']+"."+test_obj.attack_name+"."+test_obj.test_name+"."+"dad-log"
-            
-            dad_files = [adp_file_curr_path, dad_file_curr_path , dad_log_curr_path]
-            #Move all dad-agent created files to validation/dataset/test<n> directory
-
-            for dad_agent_file in dad_files:
+            for each_test in items['dad_tests']:
+                print( each_test)
                 
-                chck_file_exists = dad_agent_dest_path+"/"+os.path.basename(dad_agent_file)
-                remove_file_if_exists(chck_file_exists)   #Remove file if it is existing inplace already                 
-                dad_agent_file = full_path+"/"+dad_agent_file
-                shutil.move( dad_agent_file , dad_agent_dest_path)
-            
-            
-            
-            validator_arg = test_obj.dad_validator_params()
-            varg_list= list(validator_arg.split(","))
+                dad_obj= Dad_agent_params(d,j,items, each_test)
+                dad_params = dad_obj.dad_agent_params()
+                
+                print("dad_p",dad_params)
+                
+                dad_agent_list= list(dad_params.split(","))
 
-            print("attackname path",varg_list)
-           
-            validator_res =subprocess.Popen(varg_list ,stdout=subprocess.PIPE)           
-            stdout = validator_res.communicate()[0]
-            dad_validator_res = stdout.decode('utf-8')
-            print(dad_validator_res)           
+                dad_result = subprocess.run(dad_agent_list,env={'PATH': '/dad_agent/dadpoc'},stdout=subprocess.PIPE)
+                dad_result = dad_result.stdout.decode('utf-8')
+                print(dad_result)
+                
+                
+                full_path = os.path.dirname(os.path.abspath(__file__))
+                dad_agent_dest_path = full_path+"/"+dad_obj.d+"/"+dad_obj.test_name+"/"+dad_obj.dad_test_name
+                create_directory_ifnot_exists(dad_agent_dest_path)
+                
+                #All generated files from dad agent will be saved to run_tests file direc before moving them
+                adp_file_curr_path = dad_obj.j['Testfile']['name']+"."+dad_obj.attack_name+"."+dad_obj.test_name+"."+"adp"
+                dad_file_curr_path = dad_obj.j['Testfile']['name']+"."+dad_obj.attack_name+"."+dad_obj.test_name+"."+"dad"
+                dad_log_curr_path= dad_obj.j['Testfile']['name']+"."+dad_obj.attack_name+"."+dad_obj.test_name+"."+"dad-log"
+                
+                dad_files = [adp_file_curr_path, dad_file_curr_path , dad_log_curr_path]
+                #Move all dad-agent created files to validation/dataset/test<n> directory
+
+                for dad_agent_file in dad_files:
+                    
+                    chck_file_exists = dad_agent_dest_path+"/"+os.path.basename(dad_agent_file)
+                    remove_file_if_exists(chck_file_exists)   #Remove file if it is existing inplace already                 
+                    dad_agent_file = full_path+"/"+dad_agent_file
+                    shutil.move( dad_agent_file , dad_agent_dest_path)
+                
+                
+                
+                validator_arg = dad_obj.dad_validator_params(dad_agent_dest_path)
+                varg_list= list(validator_arg.split(","))
+
+                print("attackname path",varg_list)
+            
+                validator_res =subprocess.Popen(varg_list ,stdout=subprocess.PIPE)           
+                stdout = validator_res.communicate()[0]
+                dad_validator_res = stdout.decode('utf-8')
+                print(dad_validator_res)           
 
                 
                 

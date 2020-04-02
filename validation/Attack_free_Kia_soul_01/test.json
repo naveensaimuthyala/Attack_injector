@@ -1,57 +1,65 @@
 {
-    "Testfile": 
+  "Testfile": 
+  {
+  "name": "Attack_free_Kia_soul_01",
+  "can_msgs": "32",
+  "source": "kia",
+  "Tests": 
+  [
     {
-    "name": "Attack_free_Kia_soul_01",
-    "can_msgs": "32",
-    "source": "drdc",
-    "Tests": [
-      {
-        "name": "test1",
-        "attack": "dos_vol",
-        "bus": "vcan1",
-        "informat": "canshort",
-        "attackstarttime": "2.487363",
-        "attackduration": "2",
-        "imt": "default",
-        "can_id":"default",
-        "replay_seq_length": "default",
-        "number_of_times_to_replay":"500",
-        
-        
-        "dad_imt":"1",
-        "dad_entropy":"1",
+      "name": "test1",
+      "attack": "fuzzy_ins",
+      "bus": "vcan1",
+      "informat": "canshort",
+      "attackstarttime": "2.431340",
+      "attackduration": "0.5",
+      "imt": "0.001",
+      "can_id":"default",
+      "replay_seq_length": "default",
+      "number_of_times_to_replay":"500",
+      
+      "dad_tests": 
+      [
+        {
+          "dad_test_name": "dad_1.1",
+          "dad_imt":"1",
+          "dad_entropy":"1",
+          "B": "5",
+          "R": "8",
+          "W": "10",
+          "C": "0.15",
+          "D": "0.0075",
+          "P": "0.01"
+        },
+        {
+          "dad_test_name": "dad_1.2",
+          "dad_imt":"1",
+          "dad_entropy":"1",
+          "B": "15",
+          "R": "15",
+          "W": "120",
+          "C": "0.95",
+          "D": "0.001",
+          "P": "0.06"
+        },
+        {
+          "dad_test_name": "dad_1.3",
+          "dad_imt":"1",
+          "dad_entropy":"1",
+          "B": "15",
+          "R": "15",
+          "W": "40",
+          "C": "0.95",
+          "D": "0.001",
+          "P": "0.06"
+        }
 
-        "B": "5",
-        "R": "8",
-        "W": "10",
-        "C": "0.15",
-        "D": "0.0075",
-        "P": "0.01"
-      },
-      {
-        "name": "test2",
-        "attack": "dos_vol",
-        "bus": "vcan1",
-        "informat": "canshort",
-        "attackstarttime": "2.487363",
-        "attackduration": "2",
-        "imt": "default",
-        "can_id":"default",
-        "replay_seq_length": "default",
-        "number_of_times_to_replay":"500",
-        
-        
-        "dad_imt":"1",
-        "dad_entropy":"1",
-
-        "B": "5",
-        "R": "8",
-        "W": "10",
-        "C": "0.15",
-        "D": "0.0075",
-        "P": "0.01"
-      }
       ]
+  
+  
     }
-    
+
+  ]
+}
+  
 }

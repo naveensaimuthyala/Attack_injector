@@ -70,6 +70,7 @@ parser = parsers[infrmt]
 
 inp_args_data= vars(args)
 ## save the command line arguments given to json file
+
 with open(outfile.replace(".log","")+'_params.json', 'w') as fp:
     json.dump(inp_args_data, fp, sort_keys=True, indent=4)
 
