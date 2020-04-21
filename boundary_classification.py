@@ -22,6 +22,7 @@ def get_sliced_matrix(binary_canmsgwindow_array, left_bit, field_length):
 
     sub_matrix = binary_canmsgwindow_array[:, left_bit:left_bit + field_length] #slicing all rows with columns leftbit to left_bit+field_length
     
+    #print("len", len(sub_matrix))
     int_arr = np.packbits(sub_matrix, axis=1) #convert each message to integer array
     
     
@@ -46,26 +47,45 @@ def extract_unique_valcount_from_matrix(data_matrix, fileds_to_skip):
 
     print("Fields to skip are ", fileds_to_skip)
     canmsgs_window_arr = data_matrix.astype('u1')
-    
     print("window arr", len(canmsgs_window_arr))
     time_start = time.time()
     
     uniquecnt_matrix = np.zeros((64, 64))
     
-   
-    
+    matrix_size =64
+    skipindex_matrix = np.rot90(np.triu(np.ones((matrix_size, matrix_size), dtype=str)))
+    skipindex_matrix[skipindex_matrix==''] = ' '
+    finalskip_index=[]
+    #print(skipindex_matrix)
     for user_classified_idx in fileds_to_skip:
        
-        start_bit_index = user_classified_idx[1]
-        end_bit_index = user_classified_idx[1]+ user_classified_idx[1]+1
-        #print(" Before \n", uniquecnt_matrix[:,start_bit_index:end_bit_index])
+        start_bit_index = user_classified_idx[0]+1  # determines zero based indexing or 1 based indexing for testing only
+        end_bit_index = user_classified_idx[1]
+        
+        
+        # #print(" Before \n", uniquecnt_matrix[:,start_bit_index:end_bit_index])
 
-        #print("change values from field {} to length {}".format(user_classified_idx[1], user_classified_idx[0]+1))
-        uniquecnt_matrix[:,start_bit_index:end_bit_index] = -5
-        #print(" After \n", uniquecnt_matrix[:,start_bit_index:end_bit_index])
+        # #print("change values from field {} to length {}".format(user_classified_idx[1], user_classified_idx[0]+1))
+        # uniquecnt_matrix[:,start_bit_index:end_bit_index] = -5
+        # #print(" After \n", uniquecnt_matrix[:,start_bit_index:end_bit_index])
     
-    print("Matrix", uniquecnt_matrix)
-    sys.exit()
+                
+        for i in range(start_bit_index):
+            c = (end_bit_index + i)
+            skipindex_matrix[: -c, c] = '*'
+
+        #print(skipindex_matrix)
+        
+        for i in range(end_bit_index):
+            skipindex_matrix[end_bit_index-i:matrix_size-i, i] = '*'
+    
+        res = np.where(skipindex_matrix=='*')
+        res= list(zip(res[0], res[1]))
+        finalskip_index.extend(res)
+    
+    finalskip_index = list(set(finalskip_index))
+    finalskip_index.sort()
+    print("Matrix", len(finalskip_index))
     print ("Processing rows")
     sys.stdout.flush()
     
@@ -75,23 +95,29 @@ def extract_unique_valcount_from_matrix(data_matrix, fileds_to_skip):
         
         for remaining_field_length  in range(64-msg_length):
             
+            if (msg_length,remaining_field_length) in finalskip_index:
+                
+                #print( "skipping Tuple is", (msg_length, remaining_field_length))
+                continue
             a_packed = get_sliced_matrix(canmsgs_window_arr, msg_length,
                                                  remaining_field_length + 1)
             unique_val= np.unique(a_packed)
 
             #print("index being filled : ({},{})".format(msg_length, remaining_field_length))
             uniquecnt_matrix[msg_length, remaining_field_length] = len(unique_val)
-            
+        
     time_end = time.time() - time_start
 
     print("\nTime elapsed = {}s".format(time_end))
 
-    return uniquecnt_matrix
+    #print( uniquecnt_matrix)
+    #sys.exit()
+    return uniquecnt_matrix, finalskip_index
 
 
 
 
-def get_field_type_score(f):
+def get_field_type_score(f,skip_index_arr):
     """
     Calculate a score and corresponding type for every candidate field
     as represented by the unique val counts in unique val matrix given as input.
@@ -108,6 +134,10 @@ def get_field_type_score(f):
     T_minlength = 2
     for left_bit in range(64):
         for field_length in range(64):
+            
+            if (left_bit, field_length) in skip_index_arr:
+                continue
+            
             unique_val_count = f[left_bit, field_length]
             T_maxval = min(np.sqrt(2.**(field_length+1)), T_mv)
             
@@ -169,17 +199,26 @@ def check_field_overlap(best_field, key):
         return False
 
 
-def choose_fileds(f_score, f_typen):
+def choose_fileds(f_score, f_typen ,skip_index_arr):
 
     field_dict = {}
+    
     for row in range(64):
         for col in range(64-row):
-            field_dict[(row, col)] = (f_score[row, col], f_typen[row, col])
+            
+            if(row,col) in skip_index_arr:
+                
+                continue
+            else:
+                
+                field_dict[(row, col)] = (f_score[row, col], f_typen[row, col])
             
     
     chosen_fields = {}
+    
     while field_dict:
         number_of_fields_in_field_dict = len(field_dict)
+        
         best_field = get_field_with_max_score(field_dict)
 
         chosen_fields[best_field] = field_dict.pop(best_field)
@@ -230,13 +269,63 @@ def classify_can_payload_fields(cmsg_list, user_skip_list):
     bit_seq =convert_intarr_to_matrix(npcmsg, output_type=np.uint32)
     
     #print("Bit seq", len(bit_seq[0]))
-    f = extract_unique_valcount_from_matrix(bit_seq, user_skip_list)
+    f, skip_index_arr = extract_unique_valcount_from_matrix(bit_seq, user_skip_list)
        
-    field_score, field_category = get_field_type_score(f)
+     
+    
+    field_score, field_category = get_field_type_score(f,skip_index_arr)
 
-    final_fields =choose_fileds(field_score, field_category)
+    final_fields =choose_fileds(field_score, field_category, skip_index_arr)
     
     return final_fields
+
+
+
+
+def extract_can_payload_fields(infile, canid,cmsg_list, user_specified_indexes, user_classified_fields):
+        
+    f_d =classify_can_payload_fields( cmsg_list, user_specified_indexes)
+    f_d.update( user_classified_fields)
+    #print("here", user_classified_fields)
+    #sys.exit()
+    
+    f_list=sorted(f_d.items())
+    
+
+    field_dict=OrderedDict()
+    
+    field_dict["source"] = infile
+    field_dict["processing"] = "CONST/SENSOR/COUNTER/MULTIVALUE"
+    field_dict["can_messages"]=[]
+    
+    classified_indexes_info={}
+    classified_indexes_info["canid"]= canid
+    classified_indexes_info["fields"]= []
+    
+    
+    field_dict["index-type"]={}
+    for index,element in enumerate(f_list):
+        classified_indices ={}
+        classified_indices["s_no"]= index+1
+        classified_indices["left_bit"]= element[0][0]
+        classified_indices["length"] = element[0][1]
+        classified_indices["score"] = element[1][0]
+        classified_indices["type"] = element[1][1]
+        classified_indexes_info["fields"].append(classified_indices)
+
+        field_dict["index-type"][str(index+1)+"-"+str(element[0])] = str(element[1])   
+    
+    field_dict["can_messages"].append(classified_indexes_info)
+    
+    print("field dict", field_dict)         
+    end = time.time()
+
+    json_object=json.dumps(field_dict,indent = 2)
+    
+    # Writing to jsonfile 
+    with open(infile+"_"+str(canid)+"_classified_fields.json", "w") as outfile: 
+        outfile.write(json_object) 
+    print( " classified  {0:} lines in {1:.4f} seconds.".format(num_lines, end-start))
 
 
 
@@ -274,53 +363,60 @@ if __name__ == "__main__":
     start = time.time()
 
     num_lines = 0
-    cmsg_list =[]
+    cmsg_dict ={}
 
 
     with open(infile, "r") as ifile:
         for line in ifile:
             cmsg = parser(line)
-            cmsg_list.append(cmsg.data)
+            
+            if not (cmsg.arb_id in cmsg_dict):
+                cmsg_dict[cmsg.arb_id]=[]
+                cmsg_dict[cmsg.arb_id].append(cmsg.data)
+            elif cmsg.arb_id in cmsg_dict:
+                cmsg_dict[cmsg.arb_id].append(cmsg.data)
+            else:
+                
+                print("BUG")
+                
             num_lines += 1
-
-    user_specified_indexes=[]
-
-    with open ("skip_fields.json") as f:
-        j = json.load(f)
-        keys=j["index-type"].keys()
-        for k in keys:
-            idx = k.split("-")
-            user_specified_indexes.append(ast.literal_eval(idx[1]))
-    
-
-    f_d =classify_can_payload_fields( cmsg_list, user_specified_indexes)
- 
-
-    f_list=sorted(f_d.items())
     
     
-    # constant_list =[] 
-    # multival_list =[]
-    # senctr_list =[] 
-    # for element in f_list:
-    #     #print("index is:{}-{} ".format(element[0], element[1]))
-    #     if( element[1][1]=="CONSTANT"):
-    #         constant_list.append(element)
-    #     elif( element[1][1]=="MULTIVAL"):
-    #         multival_list.append(element)
-    #     elif( element[1][1]=="SEN/CTR"):
-    #         senctr_list.append(element)
     
-    field_dict=OrderedDict()
-    field_dict["index-type"]={}
-    for index,element in enumerate(f_list):
-        field_dict["index-type"][str(index+1)+"-"+str(element[0])] = str(element[1])   
+    with open('field_defn.json') as f:
+        j= json.load(f)
         
-    print("field dict", field_dict)         
-    end = time.time()
-    my_data = {'constant': f_list}
-    json_object=json.dumps(field_dict,indent = 2)
-    # Writing to sample.json 
-    with open("classified_fields.json", "w") as outfile: 
-        outfile.write(json_object) 
-    print( " classified  {0:} lines in {1:.4f} seconds.".format(num_lines, end-start))
+        
+        for can_id_info in j['can_messages']:
+                
+            user_specified_indexes=[]
+            user_classified_fields={}
+            
+            print("id is ", can_id_info['canid'])
+            
+            for index_info in can_id_info['fields']:
+                ctr_index = (index_info['left_bit'], index_info['length'])
+                print(ctr_index)
+                user_specified_indexes.append(ctr_index)
+                user_classification = (index_info['score'], index_info['type'])
+                user_classified_fields[ctr_index] = user_classification
+            
+            if can_id_info['canid'] in cmsg_dict:
+                
+                cmsg_list = cmsg_dict[can_id_info['canid']]
+                
+                extract_can_payload_fields( infile,can_id_info['canid'],cmsg_list, user_specified_indexes, user_classified_fields)
+                
+                cmsg_dict.pop(can_id_info['canid'])
+            else:
+                print(" {} is not present in input dataset".format(can_id_info['canid']))
+                
+        
+        while( cmsg_dict):  # classify canids that are not specified by user but present in dataset
+            print("still canids exists")
+            k_list= list(cmsg_dict.keys())
+            for k in k_list:
+                extract_can_payload_fields(infile, k,cmsg_dict[k], [],{})
+            
+        sys.exit()
+
